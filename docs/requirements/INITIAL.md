@@ -239,6 +239,11 @@ This is the first subsystem to build.
 
 The objective is to create the factory that later builds the rest of PAIOS.
 
+The approved Phase 0 boundary and deliverables are defined in
+`docs/requirements/phase-0-development-operating-system.md`. The broader
+workflow below remains the long-term direction and is not all required for
+Phase 0 completion.
+
 ## Workflow
 
 ```
