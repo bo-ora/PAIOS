@@ -17,6 +17,9 @@ after the initial workflow requirements and architecture are explicitly
 approved.
 
 - [Initial vision and requirements](docs/requirements/INITIAL.md)
+- [Codex operating model](docs/architecture/codex-operating-model.md)
+- [Project knowledge guide](docs/README.md)
+- [Codex workflow commands](docs/operations/codex-workflow.md)
 - [Contributor guidelines](AGENTS.md)
 
 ## Core Principles
@@ -26,3 +29,19 @@ approved.
 - Durable, resumable workflows
 - Human approval at consequential decision points
 - Infrastructure, configuration, prompts, and documentation as code
+
+## Validate the Repository
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 scripts/validate_repository.py .
+git diff --check
+```
+
+Run a measured read-only Codex task while keeping raw events outside Git:
+
+```bash
+python3 scripts/capture_codex_session.py \
+  "architecture research" \
+  "Compare persistence options for the first durable workflow milestone."
+```

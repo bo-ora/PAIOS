@@ -6,12 +6,34 @@ PAIOS is currently in its bootstrap phase. The product vision and initial techni
 
 As implementation begins, place Python services in `services/<service-name>/`, shared packages in `packages/`, infrastructure in `infra/`, workflow definitions in `workflows/`, and tests beside each component or under its `tests/` directory. Store only reproducible configuration and templates in Git; runtime data belongs in ignored volumes.
 
+## Codex Working Model
+
+Give each session one primary role: requirements, research, architecture,
+planning, implementation, testing, monitoring, documentation, or audit. State
+the goal, relevant files, constraints, and done criteria. Use
+`$paios-project-workflow` when the next artifact or approval gate is unclear,
+and `$paios-session-close` to create a resumable handoff.
+
+Approved knowledge belongs in requirements, ADRs, and plans. Session summaries
+under `docs/sessions/` are evidence only. Promote stable findings rather than
+treating transcripts as project truth. Keep raw Codex events under
+`.local/paios-sessions/`; never commit them.
+
+Before changing any Codex skill, plugin, agent, hook, command, prompt, or
+description, follow `evals/codex/README.md`: run the unchanged scenario, record
+RED, make the smallest change, and rerun the identical scenario for GREEN. If
+the baseline passes, do not change the capability.
+
 ## Build, Test, and Development Commands
 
-No application build system is committed yet. Until one exists, use:
+No application build system is committed yet. Use:
 
 - `git status --short --branch` — review local changes and the active branch.
 - `git diff --check` — detect whitespace errors before committing.
+- `python3 -m unittest discover -s tests -v` — run repository tooling tests.
+- `python3 scripts/validate_repository.py .` — validate knowledge artifacts.
+- `python3 scripts/capture_codex_session.py NAME PROMPT` — run a measured,
+  read-only Codex session with ignored local JSONL evidence.
 - `docker compose config` — validate Compose configuration once `compose.yaml` is added.
 - `pytest` — run Python tests once a service defines its dependencies.
 
@@ -24,6 +46,10 @@ Use four-space indentation for Python, type annotations for public interfaces, a
 ## Testing Guidelines
 
 Use `pytest` for Python components. Name files `test_<module>.py` and tests `test_<behavior>`. Cover normal behavior, failure/retry paths, persistence boundaries, and adapter contracts. Every bug fix should include a regression test. Integration tests must use disposable containers or isolated test databases.
+
+Before declaring completion, run relevant tests, repository validation,
+`git diff --check`, and review the full diff. Record exact evidence in the
+related plan or session summary.
 
 ## Commit & Pull Request Guidelines
 
