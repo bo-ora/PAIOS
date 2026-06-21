@@ -105,4 +105,4 @@ time only after documented baseline failures.
 - [x] Run all unit tests, repository validation, `git diff --check`, and skill
       validation.
 - [x] Review the complete diff for privacy, portability, and unnecessary scope.
-- [ ] Commit and push to `master`.
+- [x] Commit and push to `master`.
