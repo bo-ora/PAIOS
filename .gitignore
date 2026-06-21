@@ -1,0 +1,12 @@
+# Local Codex transcripts, JSONL events, and derived metrics.
+.local/
+
+# Python caches and local environments.
+__pycache__/
+*.py[cod]
+.venv/
+
+# Secrets and local configuration.
+.env
+.env.*
+!.env.example
