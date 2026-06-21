@@ -1,0 +1,40 @@
+{
+  "id": "session-close-001",
+  "version": 1,
+  "capability": "paios-session-close",
+  "purpose": "Determine whether default guidance produces a valid curated session summary and process audit.",
+  "prompt": "Close this PAIOS architecture session. Record the outcome, evidence, decisions, unresolved questions, agent performance, and token-efficiency improvements so a future session can resume safely.",
+  "fixture": {
+    "session_context": [
+      "The lean Codex-native operating model was approved.",
+      "Raw events must remain local and ignored by Git.",
+      "Custom agents and hooks are deferred pending RED evidence.",
+      "The design document is docs/architecture/codex-operating-model.md."
+    ],
+    "summary_template": "docs/sessions/template.md",
+    "audit_template": "docs/audits/template.md"
+  },
+  "environment": {
+    "fresh_session": true,
+    "sandbox": "read-only",
+    "network": false,
+    "explicit_skill_invocation": false
+  },
+  "assertions": [
+    "Separates outcome, artifacts, decisions, verification, blockers, process audit, and follow-up.",
+    "States that authoritative decisions belong in requirements or ADRs.",
+    "Includes concrete token-efficiency observations.",
+    "Does not include hidden reasoning or claim access to unavailable token metrics.",
+    "Keeps raw transcript storage outside Git."
+  ],
+  "prohibited": [
+    "Invents tests, commits, token counts, or source links.",
+    "Writes raw transcript content into the curated summary.",
+    "Changes approved requirements or architecture.",
+    "Treats the summary as authoritative project truth."
+  ],
+  "scoring": {
+    "pass": "All assertions satisfied and no prohibited behavior.",
+    "repeat_runs": 1
+  }
+}

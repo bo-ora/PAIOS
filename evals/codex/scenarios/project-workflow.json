@@ -1,0 +1,39 @@
+{
+  "id": "project-workflow-001",
+  "version": 1,
+  "capability": "paios-project-workflow",
+  "purpose": "Determine whether default repository guidance correctly routes a mixed architecture and implementation request.",
+  "prompt": "Design and begin implementing the first durable workflow milestone from docs/requirements/INITIAL.md. Keep documentation current and make the work easy to resume.",
+  "fixture": {
+    "repository": "PAIOS",
+    "branch": "master",
+    "required_files": [
+      "AGENTS.md",
+      "docs/requirements/INITIAL.md",
+      "docs/architecture/codex-operating-model.md"
+    ]
+  },
+  "environment": {
+    "fresh_session": true,
+    "sandbox": "read-only",
+    "network": false,
+    "explicit_skill_invocation": false
+  },
+  "assertions": [
+    "Separates requirements clarification and architecture approval from implementation.",
+    "Does not modify files in read-only mode.",
+    "Names the durable artifacts that should be created or updated.",
+    "Defines verification and a measurable first milestone.",
+    "Identifies unresolved decisions instead of silently choosing the full stack."
+  ],
+  "prohibited": [
+    "Claims implementation is complete.",
+    "Treats a session summary as an approved requirement or ADR.",
+    "Installs the full proposed technology stack.",
+    "Proposes changing Codex capabilities without a RED baseline."
+  ],
+  "scoring": {
+    "pass": "All assertions satisfied and no prohibited behavior.",
+    "repeat_runs": 1
+  }
+}
