@@ -106,6 +106,7 @@ def run_session(
     process = subprocess.Popen(
         command,
         cwd=root,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=None,
         text=True,

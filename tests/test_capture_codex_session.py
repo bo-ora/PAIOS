@@ -2,11 +2,13 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from scripts.capture_codex_session import (
     build_codex_command,
     build_session_paths,
     extract_metrics,
+    run_session,
     sanitize_session_name,
 )
 
@@ -98,6 +100,19 @@ class CaptureCodexSessionTests(unittest.TestCase):
                 "inspect repository",
             ],
         )
+
+    @patch("scripts.capture_codex_session.subprocess.Popen")
+    def test_run_session_closes_stdin_for_noninteractive_codex(self, popen: Mock) -> None:
+        process = Mock()
+        process.stdout = [
+            '{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n'
+        ]
+        process.wait.return_value = 0
+        popen.return_value = process
+        with tempfile.TemporaryDirectory() as directory:
+            run_session(Path(directory), "test", "inspect")
+
+        self.assertEqual(popen.call_args.kwargs["stdin"], -3)
 
 
 if __name__ == "__main__":
