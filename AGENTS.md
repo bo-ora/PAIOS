@@ -27,7 +27,7 @@ Use `pytest` for Python components. Name files `test_<module>.py` and tests `tes
 
 ## Commit & Pull Request Guidelines
 
-The history currently contains only `Initial commit`; use concise imperative subjects such as `docs: refine workflow requirements` or `feat: add model-router interface`. Work from feature branches into `development`, then promote approved releases to `main`. Pull requests should explain scope, architectural impact, verification performed, linked requirements/issues, and any configuration or migration steps. Include screenshots only for user-facing changes.
+Use concise imperative subjects such as `docs: refine workflow requirements` or `feat: add model-router interface`. During the bootstrap phase, commit directly to `master` to keep the workflow simple; introduce feature branches and pull requests when parallel development or review requirements justify them. Each change should explain its scope, verification performed, linked requirements, and any configuration or migration steps. Include screenshots only for user-facing changes.
 
 ## Security & Configuration
 
