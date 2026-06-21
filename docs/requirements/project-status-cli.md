@@ -2,6 +2,7 @@
 
 Status: Approved  
 Date: 2026-06-21
+Last updated: 2026-06-22
 
 ## Objective
 
@@ -29,6 +30,8 @@ The command must report:
 - unresolved questions from the latest session;
 - unchecked items from plans under `docs/plans/`;
 - first follow-up action from the latest session;
+- roadmap path, current phase, current phase value, state, and next phase;
+- technical-debt register path and unresolved item counts by severity;
 - warnings for missing or malformed expected documents.
 
 The command reads the current working tree, including uncommitted documents.
@@ -41,6 +44,13 @@ The command reads the current working tree, including uncommitted documents.
   `Blockers and Open Questions` section.
 - The suggested next action is the first item under the latest session’s
   `Follow-up` section.
+- Roadmap data comes from the authoritative phase table in `docs/ROADMAP.md`.
+  The current phase is the single row with state `in-progress` or `blocked`;
+  the next phase is the following non-deferred row. More than one active row is
+  malformed roadmap data.
+- The human report includes the repository-relative roadmap path
+  `docs/ROADMAP.md` so supported terminals and clients can open it.
+- Technical-debt counts come from unresolved rows in `docs/TECH_DEBT.md`.
 - Missing or malformed content produces explicit warnings. The CLI must not
   invent replacement values.
 - Repeated runs against unchanged repository contents produce equivalent data.
@@ -52,6 +62,65 @@ facts using stable field names and arrays.
 
 Paths shown in output must be repository-relative. Output must not include raw
 transcripts, secrets, hidden reasoning, or absolute user paths.
+
+JSON output must use the following stable root shape. Values shown are
+illustrative and must always be derived from the current working tree and
+authoritative documents:
+
+```json
+{
+  "git": {
+    "branch": "master",
+    "clean": false,
+    "changed": 2,
+    "staged": 0,
+    "untracked": 1
+  },
+  "validation": {
+    "passed": true,
+    "errors": []
+  },
+  "latestSession": {
+    "path": "docs/sessions/YYYY-MM-DD-HHMM-role-title.md",
+    "date": "YYYY-MM-DD",
+    "role": "requirements",
+    "status": "completed"
+  },
+  "unresolvedQuestions": [],
+  "pendingPlanItems": [
+    {
+      "path": "docs/plans/YYYY-MM-DD-plan.md",
+      "text": "Implement the next verified task."
+    }
+  ],
+  "nextAction": "Implement the next verified task.",
+  "roadmap": {
+    "path": "docs/ROADMAP.md",
+    "currentPhase": {
+      "id": 0,
+      "name": "Development Operating System",
+      "state": "in-progress",
+      "value": "PAIOS can be developed consistently and resumed after time away."
+    },
+    "nextPhase": {
+      "id": 1,
+      "name": "Local Knowledge Loop",
+      "state": "refining",
+      "value": "Capture personal knowledge locally and find it later with sources."
+    }
+  },
+  "technicalDebt": {
+    "path": "docs/TECH_DEBT.md",
+    "unresolvedBySeverity": {
+      "critical": 0,
+      "high": 0,
+      "medium": 1,
+      "low": 3
+    }
+  },
+  "warnings": []
+}
+```
 
 ## Exit Codes
 
@@ -77,6 +146,10 @@ The command prints all available status information before exiting `1`.
 - `./paios status` produces human-readable output.
 - `./paios status --json` produces valid JSON with equivalent status.
 - Dirty working-tree changes appear immediately.
+- Roadmap output identifies the current and next rows from `docs/ROADMAP.md`
+  and includes the repository-relative roadmap path.
+- Technical-debt output reports unresolved counts from `docs/TECH_DEBT.md`.
 - Validation failure returns `1`; warnings alone return `0`.
 - Fixtures cover clean/dirty Git state, missing sections, unchecked plans,
-  latest-session selection, warnings, and failed validation.
+  latest-session selection, roadmap parsing, debt counts, warnings, and failed
+  validation.

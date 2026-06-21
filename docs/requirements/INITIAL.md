@@ -62,7 +62,9 @@ must all be abstracted behind stable interfaces.
 
 ## Incremental Delivery
 
-The platform evolves through independent phases.
+The platform evolves through independent phases. The list below is the original
+vision input. The authoritative current phases, ordering, states, deliverables,
+and exit criteria live in `docs/ROADMAP.md`.
 
 1. Automated Development Workflow
 2. Telegram Interface

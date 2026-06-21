@@ -12,11 +12,15 @@ agent orchestration, and additional personal workflows.
 
 ## Project Status
 
-PAIOS is in the requirements and architecture phase. Implementation begins only
-after the initial workflow requirements and architecture are explicitly
-approved.
+PAIOS is currently in **Phase 0 — Development Operating System**. The immediate
+deliverable is the TypeScript Project Status CLI that will make project state,
+roadmap position, pending work, and technical debt easy to understand after
+time away.
 
+- [Roadmap and current phase](docs/ROADMAP.md)
+- [Technical debt register](docs/TECH_DEBT.md)
 - [Initial vision and requirements](docs/requirements/INITIAL.md)
+- [Approved Phase 0 requirements](docs/requirements/phase-0-development-operating-system.md)
 - [Codex operating model](docs/architecture/codex-operating-model.md)
 - [Project knowledge guide](docs/README.md)
 - [Codex workflow commands](docs/operations/codex-workflow.md)
@@ -29,6 +33,7 @@ approved.
 - Durable, resumable workflows
 - Human approval at consequential decision points
 - Infrastructure, configuration, prompts, and documentation as code
+- Incremental phases that each deliver standalone user value
 
 ## Validate the Repository
 
