@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from scripts.capture_codex_session import (
+    build_codex_command,
     build_session_paths,
     extract_metrics,
     sanitize_session_name,
@@ -77,6 +78,26 @@ class CaptureCodexSessionTests(unittest.TestCase):
         metrics = extract_metrics(events)
 
         self.assertEqual(metrics["event_count"], 1)
+
+    def test_codex_global_options_precede_exec_subcommand(self) -> None:
+        command = build_codex_command(
+            "inspect repository", sandbox="read-only", ephemeral=True
+        )
+
+        self.assertEqual(
+            command,
+            [
+                "codex",
+                "--ask-for-approval",
+                "never",
+                "exec",
+                "--json",
+                "--sandbox",
+                "read-only",
+                "--ephemeral",
+                "inspect repository",
+            ],
+        )
 
 
 if __name__ == "__main__":

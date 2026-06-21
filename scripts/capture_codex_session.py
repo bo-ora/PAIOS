@@ -74,6 +74,24 @@ def extract_metrics(events: Iterable[dict]) -> dict:
     }
 
 
+def build_codex_command(
+    prompt: str, sandbox: str = "read-only", ephemeral: bool = True
+) -> list[str]:
+    command = [
+        "codex",
+        "--ask-for-approval",
+        "never",
+        "exec",
+        "--json",
+        "--sandbox",
+        sandbox,
+    ]
+    if ephemeral:
+        command.append("--ephemeral")
+    command.append(prompt)
+    return command
+
+
 def run_session(
     root: Path,
     name: str,
@@ -83,18 +101,7 @@ def run_session(
 ) -> tuple[int, SessionPaths]:
     paths = build_session_paths(root, name)
     paths.directory.mkdir(parents=True, exist_ok=False)
-    command = [
-        "codex",
-        "exec",
-        "--json",
-        "--sandbox",
-        sandbox,
-        "--ask-for-approval",
-        "never",
-    ]
-    if ephemeral:
-        command.append("--ephemeral")
-    command.append(prompt)
+    command = build_codex_command(prompt, sandbox=sandbox, ephemeral=ephemeral)
 
     process = subprocess.Popen(
         command,
