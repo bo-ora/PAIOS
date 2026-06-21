@@ -1,0 +1,4 @@
+interface:
+  display_name: "PAIOS Project Workflow"
+  short_description: "Route PAIOS work through durable project artifacts"
+  default_prompt: "Use $paios-project-workflow to structure this PAIOS objective and identify the next approved artifact."
