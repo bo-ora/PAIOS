@@ -1,0 +1,4 @@
+interface:
+  display_name: "PAIOS Session Close"
+  short_description: "Close PAIOS sessions with durable curated evidence"
+  default_prompt: "Use $paios-session-close to close this PAIOS session and preserve only verified durable findings."
