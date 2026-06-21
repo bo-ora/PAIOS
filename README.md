@@ -13,7 +13,7 @@ agent orchestration, and additional personal workflows.
 ## Project Status
 
 PAIOS is currently in **Phase 0 — Development Operating System**. The immediate
-deliverable is the TypeScript Project Status CLI that will make project state,
+product is the TypeScript Project Status CLI, which makes project state,
 roadmap position, pending work, and technical debt easy to understand after
 time away.
 
@@ -35,9 +35,34 @@ time away.
 - Infrastructure, configuration, prompts, and documentation as code
 - Incremental phases that each deliver standalone user value
 
+## Project Status CLI
+
+Node.js 20 or newer and npm are required. Install the pinned development
+tooling and build the generated, untracked `dist/` output:
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+```
+
+Read the current repository state in human or JSON form:
+
+```bash
+./paios status
+./paios status --json
+```
+
+The command is read-only, offline, and has no runtime npm dependencies. It
+derives status directly from Git and repository Markdown.
+
 ## Validate the Repository
 
 ```bash
+npm run typecheck
+npm test
+npm run build
 python3 -m unittest discover -s tests -v
 python3 scripts/validate_repository.py .
 git diff --check

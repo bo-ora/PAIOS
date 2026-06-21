@@ -10,7 +10,7 @@ import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -33,7 +33,7 @@ def sanitize_session_name(value: str) -> str:
 def build_session_paths(
     root: Path, name: str, timestamp: str | None = None
 ) -> SessionPaths:
-    stamp = timestamp or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    stamp = timestamp or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     directory = root.resolve() / ".local/paios-sessions" / (
         f"{stamp}-{sanitize_session_name(name)}"
     )

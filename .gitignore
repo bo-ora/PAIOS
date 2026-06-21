@@ -6,6 +6,11 @@ __pycache__/
 *.py[cod]
 .venv/
 
+# Generated TypeScript output and installed development dependencies.
+dist/
+.test-dist/
+node_modules/
+
 # Secrets and local configuration.
 .env
 .env.*

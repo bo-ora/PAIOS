@@ -59,6 +59,12 @@ agents editing shared files, and require concise evidence-backed summaries.
 ## Routine Verification
 
 ```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+./paios status
+./paios status --json
 python3 -m unittest discover -s tests -v
 python3 scripts/validate_repository.py .
 git diff --check

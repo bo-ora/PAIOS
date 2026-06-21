@@ -1,0 +1,12 @@
+#!/bin/sh
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ENTRY="$ROOT/dist/paios/cli.js"
+
+if [ ! -f "$ENTRY" ]; then
+    echo "PAIOS compiled CLI not found. Run: npm run build" >&2
+    exit 2
+fi
+
+cd "$ROOT" || exit 2
+exec node "$ENTRY" "$@"
