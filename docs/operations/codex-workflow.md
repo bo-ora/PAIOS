@@ -36,6 +36,10 @@ outcome, artifacts, decisions, verification, blockers, process audit, and
 follow-up. Promote stable conclusions into requirements, ADRs, plans,
 `AGENTS.md`, or an evaluated repository skill.
 
+When a session adds or changes user-visible behavior, update
+`HOW_TO_USE.md` with a short verified scenario before closeout. Do not document
+reserved or planned commands as usable.
+
 ## Evaluate Capability Changes
 
 Before changing a Codex skill, plugin, agent, hook, command, prompt, or

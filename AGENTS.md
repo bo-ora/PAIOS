@@ -31,9 +31,11 @@ the baseline passes, do not change the capability.
 
 ## Build, Test, and Development Commands
 
-Use Node.js 20 or newer. The Project Status CLI has no runtime npm dependencies;
+Use Node.js 24 or newer. The Project Status CLI has no runtime npm dependencies;
 TypeScript and Node type definitions are development dependencies:
 
+- `./lde.sh` — check required and phase-specific machine prerequisites without
+  changing the machine.
 - `git status --short --branch` — review local changes and the active branch.
 - `git diff --check` — detect whitespace errors before committing.
 - `npm ci` — install pinned CLI development tooling.

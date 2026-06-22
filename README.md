@@ -23,6 +23,8 @@ slice.
 - [Approved Phase 0 requirements](docs/requirements/phase-0-development-operating-system.md)
 - [Codex operating model](docs/architecture/codex-operating-model.md)
 - [Project knowledge guide](docs/README.md)
+- [Implemented usage scenarios](HOW_TO_USE.md)
+- [Development environment requirements](docs/operations/development-environment.md)
 - [Codex workflow commands](docs/operations/codex-workflow.md)
 - [Contributor guidelines](AGENTS.md)
 
@@ -41,6 +43,7 @@ Node.js 24 or newer and npm are required. Install the pinned development
 tooling and build the generated, untracked `dist/` output:
 
 ```bash
+./lde.sh
 npm ci
 npm run lint
 npm run typecheck
@@ -74,6 +77,9 @@ from transactional SQLite metadata and rebuildable FTS5 search state.
 The remaining document, repository, inbox, search, rebuild, and audio commands
 are reserved by the CLI namespace and will be implemented in subsequent Phase 1
 slices.
+
+See [HOW_TO_USE.md](HOW_TO_USE.md) for short, verified scenarios and expected
+behavior.
 
 ## Validate the Repository
 

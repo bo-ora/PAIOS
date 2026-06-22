@@ -32,6 +32,11 @@ A session summary is evidence, not authority. Promote stable conclusions into:
 
 Commit documentation with the implementation or decision it explains.
 
+Keep user-facing examples of committed behavior in the repository-root
+`HOW_TO_USE.md`. Add a scenario only after its implementation and verification
+exist. Track machine prerequisites and local configuration expectations in
+`operations/development-environment.md`; keep `lde.sh` read-only by default.
+
 The phase table in `ROADMAP.md` is authoritative. Its Mermaid diagram and
 current-position summary are projections for orientation.
 
