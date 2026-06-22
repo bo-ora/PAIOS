@@ -1,8 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
+import { basename, extname } from "node:path";
 
 import type { DatabaseSync } from "node:sqlite";
 
-import type { KnowledgeRecord } from "../types.js";
+import type {
+  KnowledgeRecord,
+  KnowledgeSearchResult,
+  KnowledgeSourceType,
+} from "../types.js";
 import { openKnowledgeDatabase } from "./database.js";
 import { writeManagedSource } from "./source-files.js";
 
@@ -30,12 +36,15 @@ export class DuplicateKnowledgeError extends Error {
   }
 }
 
-function checksum(content: string): string {
-  return createHash("sha256").update(content, "utf8").digest("hex");
+function checksum(content: string | Uint8Array): string {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 function normalizeText(content: string): string {
-  return content.replace(/\r\n?/g, "\n").normalize("NFC");
+  return content
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n?/g, "\n")
+    .normalize("NFC");
 }
 
 function parseExternalReference(
@@ -112,18 +121,24 @@ export interface AddNoteInput {
   title?: string;
 }
 
-export function addNote(dataRoot: string, input: AddNoteInput): KnowledgeRecord {
-  const normalizedText = normalizeText(input.content);
-  if (normalizedText.trim().length === 0) {
-    throw new Error("Note content must not be empty.");
-  }
-  const title = input.title?.trim();
-  if (input.title !== undefined && title?.length === 0) {
-    throw new Error("Note title must not be empty.");
-  }
+interface CaptureManagedInput {
+  sourceType: Extract<KnowledgeSourceType, "note" | "managed-file">;
+  title: string | null;
+  normalizedText: string;
+  sourceAdapter: string;
+  sourceDirectory: string;
+  sourceExtension: string;
+  sourceBytes: Uint8Array;
+  originalName: string | null;
+  claimedMimeType: string | null;
+  detectedMediaType: string | null;
+}
 
-  const contentChecksum = checksum(input.content);
-  const bytes = Buffer.byteLength(input.content, "utf8");
+function captureManagedSource(
+  dataRoot: string,
+  input: CaptureManagedInput,
+): KnowledgeRecord {
+  const contentChecksum = checksum(input.sourceBytes);
   const connection = openKnowledgeDatabase(dataRoot);
 
   try {
@@ -131,10 +146,18 @@ export function addNote(dataRoot: string, input: AddNoteInput): KnowledgeRecord 
     if (existing?.state === "ready") {
       throw new DuplicateKnowledgeError(existing.id);
     }
+    if (
+      existing !== undefined &&
+      (existing.source_adapter !== input.sourceAdapter ||
+        existing.source_type !== input.sourceType)
+    ) {
+      throw new DuplicateKnowledgeError(existing.id);
+    }
 
     const id = existing?.id ?? randomUUID();
     const sourceReference =
-      existing?.source_reference ?? `sources/notes/${id}.txt`;
+      existing?.source_reference ??
+      `sources/${input.sourceDirectory}/${id}${input.sourceExtension}`;
     if (existing === undefined) {
       connection.database.exec("BEGIN IMMEDIATE");
       try {
@@ -142,16 +165,22 @@ export function addNote(dataRoot: string, input: AddNoteInput): KnowledgeRecord 
           .prepare(`
             INSERT INTO records (
               id, source_type, title, source_reference, captured_at, state,
-              normalized_text, source_adapter, byte_length, checksum
-            ) VALUES (?, 'note', ?, ?, ?, 'pending', ?, 'cli-note', ?, ?)
+              normalized_text, source_adapter, original_name,
+              claimed_mime_type, detected_media_type, byte_length, checksum
+            ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
           `)
           .run(
             id,
-            title ?? null,
+            input.sourceType,
+            input.title,
             sourceReference,
             new Date().toISOString(),
-            normalizedText,
-            bytes,
+            input.normalizedText,
+            input.sourceAdapter,
+            input.originalName,
+            input.claimedMimeType,
+            input.detectedMediaType,
+            input.sourceBytes.byteLength,
             contentChecksum,
           );
         connection.database.exec("COMMIT");
@@ -161,14 +190,31 @@ export function addNote(dataRoot: string, input: AddNoteInput): KnowledgeRecord 
       }
     } else {
       connection.database
-        .prepare(
-          "UPDATE records SET state = 'pending', error_message = NULL WHERE id = ?",
-        )
-        .run(id);
+        .prepare(`
+          UPDATE records
+          SET title = ?,
+              normalized_text = ?,
+              original_name = ?,
+              claimed_mime_type = ?,
+              detected_media_type = ?,
+              byte_length = ?,
+              state = 'pending',
+              error_message = NULL
+          WHERE id = ?
+        `)
+        .run(
+          input.title,
+          input.normalizedText,
+          input.originalName,
+          input.claimedMimeType,
+          input.detectedMediaType,
+          input.sourceBytes.byteLength,
+          id,
+        );
     }
 
     try {
-      writeManagedSource(dataRoot, sourceReference, input.content);
+      writeManagedSource(dataRoot, sourceReference, input.sourceBytes);
     } catch (error) {
       connection.database
         .prepare(
@@ -188,6 +234,166 @@ export function addNote(dataRoot: string, input: AddNoteInput): KnowledgeRecord 
       throw new Error("Captured record could not be read.");
     }
     return rowToRecord(record);
+  } finally {
+    connection.close();
+  }
+}
+
+export function addNote(dataRoot: string, input: AddNoteInput): KnowledgeRecord {
+  const normalizedText = normalizeText(input.content);
+  if (normalizedText.trim().length === 0) {
+    throw new Error("Note content must not be empty.");
+  }
+  const title = input.title?.trim();
+  if (input.title !== undefined && title?.length === 0) {
+    throw new Error("Note title must not be empty.");
+  }
+
+  return captureManagedSource(dataRoot, {
+    sourceType: "note",
+    title: title ?? null,
+    normalizedText,
+    sourceAdapter: "cli-note",
+    sourceDirectory: "notes",
+    sourceExtension: ".txt",
+    sourceBytes: Buffer.from(input.content, "utf8"),
+    originalName: null,
+    claimedMimeType: "text/plain; charset=utf-8",
+    detectedMediaType: "text/plain; charset=utf-8",
+  });
+}
+
+const supportedDocumentTypes = new Map([
+  [".md", "text/markdown; charset=utf-8"],
+  [".txt", "text/plain; charset=utf-8"],
+]);
+
+export class KnowledgeInputError extends Error {}
+
+function decodeUtf8(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new KnowledgeInputError("Document must contain valid UTF-8 text.");
+  }
+}
+
+export function addFile(dataRoot: string, path: string): KnowledgeRecord {
+  let stats;
+  try {
+    stats = statSync(path);
+  } catch {
+    throw new KnowledgeInputError("Document could not be read.");
+  }
+  if (!stats.isFile()) {
+    throw new KnowledgeInputError("Document path must reference a file.");
+  }
+
+  const extension = extname(path).toLowerCase();
+  const mediaType = supportedDocumentTypes.get(extension);
+  if (mediaType === undefined) {
+    throw new KnowledgeInputError(
+      "Unsupported document format; use .md or .txt.",
+    );
+  }
+
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(path);
+  } catch {
+    throw new KnowledgeInputError("Document could not be read.");
+  }
+  const normalizedText = normalizeText(decodeUtf8(bytes));
+  if (normalizedText.trim().length === 0) {
+    throw new KnowledgeInputError("Document content must not be empty.");
+  }
+  const originalName = basename(path);
+
+  return captureManagedSource(dataRoot, {
+    sourceType: "managed-file",
+    title: originalName,
+    normalizedText,
+    sourceAdapter: "cli-file",
+    sourceDirectory: "files",
+    sourceExtension: extension,
+    sourceBytes: bytes,
+    originalName,
+    claimedMimeType: mediaType,
+    detectedMediaType: mediaType,
+  });
+}
+
+interface SearchRow {
+  id: string;
+  title: string | null;
+  source_type: KnowledgeSourceType;
+  excerpt: string;
+  source_reference: string;
+  captured_at: string;
+  rank: number;
+}
+
+export function searchRecords(
+  dataRoot: string,
+  query: string,
+): KnowledgeSearchResult[] {
+  if (query.trim().length === 0) {
+    throw new KnowledgeInputError("Search query must not be empty.");
+  }
+  const connection = openKnowledgeDatabase(dataRoot);
+  try {
+    let rows: SearchRow[];
+    try {
+      rows = connection.database
+        .prepare(`
+          SELECT records.id,
+                 records.title,
+                 records.source_type,
+                 snippet(record_search, 1, '[', ']', '…', 24) AS excerpt,
+                 records.source_reference,
+                 records.captured_at,
+                 bm25(record_search, 5.0, 1.0) AS rank
+          FROM record_search
+          JOIN records ON records.internal_id = record_search.rowid
+          WHERE record_search MATCH ? AND records.state = 'ready'
+          ORDER BY rank ASC, records.id ASC
+        `)
+        .all(query) as unknown as SearchRow[];
+    } catch {
+      throw new KnowledgeInputError("Invalid search query.");
+    }
+    return rows.map((row, index) => ({
+      position: index + 1,
+      recordId: row.id,
+      title: row.title,
+      sourceType: row.source_type,
+      excerpt: row.excerpt,
+      sourceReference: row.source_reference,
+      capturedAt: row.captured_at,
+      rank: row.rank,
+    }));
+  } finally {
+    connection.close();
+  }
+}
+
+export function rebuildSearchIndex(dataRoot: string): number {
+  const connection = openKnowledgeDatabase(dataRoot);
+  try {
+    connection.database.exec("BEGIN IMMEDIATE");
+    try {
+      connection.database.exec(
+        "INSERT INTO record_search(record_search) VALUES ('rebuild');",
+      );
+      connection.database.exec("COMMIT");
+    } catch (error) {
+      connection.database.exec("ROLLBACK");
+      throw error;
+    }
+    const row = connection.database
+      .prepare("SELECT COUNT(*) AS count FROM records WHERE state = 'ready'")
+      .get() as { count: number };
+    return row.count;
   } finally {
     connection.close();
   }

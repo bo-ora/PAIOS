@@ -21,7 +21,7 @@ function fsyncDirectory(path: string): void {
 export function writeManagedSource(
   dataRoot: string,
   reference: string,
-  content: string,
+  content: string | Uint8Array,
 ): void {
   const destination = join(dataRoot, reference);
   const directory = dirname(destination);
@@ -29,7 +29,11 @@ export function writeManagedSource(
   mkdirSync(directory, { recursive: true, mode: 0o700 });
 
   try {
-    writeFileSync(temporary, content, { encoding: "utf8", mode: 0o600 });
+    if (typeof content === "string") {
+      writeFileSync(temporary, content, { encoding: "utf8", mode: 0o600 });
+    } else {
+      writeFileSync(temporary, content, { mode: 0o600 });
+    }
     const descriptor = openSync(temporary, "r");
     try {
       fsyncSync(descriptor);

@@ -33,7 +33,10 @@ text, repository documents, inbox files, and local audio transcription.
   data roots, SQLite/FTS5 capability checks and schema, atomic note source
   storage, `add-note`, `show`, duplicate detection, and failed-write resume are
   implemented and verified.
-- Next: Markdown/plain-text import and lexical search/rebuild.
+- 2026-06-22: Managed UTF-8 Markdown/plain-text import, deterministic FTS5
+  search, phrase queries, excerpts, source references, update triggers, and
+  derived-index rebuild completed.
+- Next: repository indexing and deletion/stale-source handling.
 
 ## Delivery Sequence
 

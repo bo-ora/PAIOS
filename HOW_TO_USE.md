@@ -74,6 +74,50 @@ Pass the identifier returned by `add-note`:
 The output includes source type, title, state, capture time, managed source
 reference, checksum, byte length, source adapter, and normalized text.
 
+## Import a Markdown or Text Document
+
+Import a UTF-8 Markdown or plain-text file:
+
+```bash
+./paios knowledge add-file docs/requirements/INITIAL.md
+```
+
+The original bytes are copied into managed local storage. Search uses separately
+normalized UTF-8 text, so line-ending and Unicode normalization do not alter the
+durable source. Other file formats and invalid or empty UTF-8 documents are
+rejected.
+
+Byte-identical content already captured as a note or file is reported as a
+duplicate.
+
+## Search Captured Knowledge
+
+Search is deterministic, case-insensitive for ordinary Latin text, and returns
+matching source excerpts rather than a generated answer:
+
+```bash
+./paios knowledge search "Telegram capture"
+```
+
+Use quotes for an exact phrase:
+
+```bash
+./paios knowledge search '"local knowledge"'
+```
+
+Each result includes its order, record identifier, source type, managed source
+reference, capture time, numeric rank, and highlighted excerpt.
+
+## Rebuild the Search Index
+
+Recreate the derived FTS5 index from durable SQLite records:
+
+```bash
+./paios knowledge rebuild
+```
+
+Rebuild does not rewrite managed source files or record identifiers.
+
 ## Use an Isolated Data Directory
 
 Use `--data-root` to try knowledge commands without touching the default local
@@ -116,12 +160,9 @@ git diff --check
 
 The CLI reserves these Phase 1 commands, but they are not usable yet:
 
-- `knowledge add-file`
 - `knowledge add-audio`
 - `knowledge index`
 - `knowledge ingest-inbox`
-- `knowledge search`
-- `knowledge rebuild`
 
 Add a scenario here only after its implementation and verification are
 committed.

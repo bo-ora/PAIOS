@@ -14,8 +14,8 @@ agent orchestration, and additional personal workflows.
 
 PAIOS has completed **Phase 0 — Development Operating System** and is
 implementing **Phase 1 — Local Knowledge Loop**. The repository-local TypeScript
-CLI reports project state and now provides the first durable local note-capture
-slice.
+CLI reports project state and provides durable note/document capture with
+deterministic lexical search.
 
 - [Roadmap and current phase](docs/ROADMAP.md)
 - [Technical debt register](docs/TECH_DEBT.md)
@@ -74,8 +74,8 @@ The default ignored data root is `.local/paios/knowledge/`. Override it with
 `--data-root PATH` or `PAIOS_DATA_ROOT`. Note source bytes are stored separately
 from transactional SQLite metadata and rebuildable FTS5 search state.
 
-The remaining document, repository, inbox, search, rebuild, and audio commands
-are reserved by the CLI namespace and will be implemented in subsequent Phase 1
+Markdown/text import, search, and rebuild are implemented. Repository indexing,
+inbox processing, and audio commands remain reserved for subsequent Phase 1
 slices.
 
 See [HOW_TO_USE.md](HOW_TO_USE.md) for short, verified scenarios and expected

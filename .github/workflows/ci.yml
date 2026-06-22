@@ -54,6 +54,10 @@ jobs:
           output=$(printf '%s\n' "CI knowledge note" | ./paios knowledge add-note --title "CI" --data-root "$data_root")
           record_id=$(printf '%s\n' "$output" | sed -n 's/^Captured note //p')
           ./paios knowledge show "$record_id" --data-root "$data_root"
+          printf '%s\n' "CI imported document" > "$data_root/input.txt"
+          ./paios knowledge add-file "$data_root/input.txt" --data-root "$data_root"
+          ./paios knowledge search '"imported document"' --data-root "$data_root"
+          ./paios knowledge rebuild --data-root "$data_root"
           rm -rf "$data_root"
 
       - name: Test Python tooling

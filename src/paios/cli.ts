@@ -13,13 +13,20 @@ import {
   resolveKnowledgeDataRoot,
 } from "./knowledge/config.js";
 import {
+  addFile,
   addNote,
   DuplicateKnowledgeError,
   getRecord,
+  KnowledgeInputError,
+  rebuildSearchIndex,
+  searchRecords,
 } from "./knowledge/records.js";
 import { assertKnowledgeRuntime } from "./knowledge/runtime.js";
 import { collectStatus } from "./status.js";
-import type { KnowledgeRecord } from "./types.js";
+import type {
+  KnowledgeRecord,
+  KnowledgeSearchResult,
+} from "./types.js";
 
 export interface CliIo {
   stdout: (text: string) => void;
@@ -78,6 +85,25 @@ function formatKnowledgeRecord(record: KnowledgeRecord): string {
   return `${lines.join("\n")}\n`;
 }
 
+function formatSearchResults(results: KnowledgeSearchResult[]): string {
+  if (results.length === 0) {
+    return "No matching knowledge records.\n";
+  }
+  return `${results
+    .map((result) =>
+      [
+        `${result.position}. ${result.title ?? result.recordId}`,
+        `   Record: ${result.recordId}`,
+        `   Type: ${result.sourceType}`,
+        `   Source: ${result.sourceReference}`,
+        `   Captured: ${result.capturedAt}`,
+        `   Rank: ${result.rank}`,
+        `   Match: ${result.excerpt}`,
+      ].join("\n"),
+    )
+    .join("\n\n")}\n`;
+}
+
 function dataRootFor(
   command: KnowledgeCommand,
   root: string,
@@ -130,6 +156,22 @@ function runKnowledge(
       io.stdout(formatKnowledgeRecord(record));
       return 0;
     }
+    if (command.name === "add-file") {
+      const record = addFile(dataRoot, command.path);
+      io.stdout(
+        `Imported file ${record.id}\nSource: ${record.sourceReference}\n`,
+      );
+      return 0;
+    }
+    if (command.name === "search") {
+      io.stdout(formatSearchResults(searchRecords(dataRoot, command.query)));
+      return 0;
+    }
+    if (command.name === "rebuild") {
+      const count = rebuildSearchIndex(dataRoot);
+      io.stdout(`Rebuilt search index for ${count} ready record(s).\n`);
+      return 0;
+    }
 
     io.stderr(`Knowledge command not implemented yet: ${command.name}\n`);
     return 2;
@@ -139,6 +181,10 @@ function runKnowledge(
       return 1;
     }
     if (error instanceof Error && error.message.startsWith("Note ")) {
+      io.stderr(`${error.message}\n`);
+      return 2;
+    }
+    if (error instanceof KnowledgeInputError) {
       io.stderr(`${error.message}\n`);
       return 2;
     }

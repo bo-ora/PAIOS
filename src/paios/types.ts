@@ -89,3 +89,14 @@ export interface KnowledgeRecord {
   provenance: SourceProvenance;
   error: string | null;
 }
+
+export interface KnowledgeSearchResult {
+  position: number;
+  recordId: string;
+  title: string | null;
+  sourceType: KnowledgeSourceType;
+  excerpt: string;
+  sourceReference: string;
+  capturedAt: string;
+  rank: number;
+}
