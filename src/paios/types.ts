@@ -105,6 +105,24 @@ export interface KnowledgeRecord {
   error: string | null;
 }
 
+export type ProcessingAttemptStatus = "succeeded" | "failed";
+
+export interface ProcessingAttempt {
+  id: string;
+  recordId: string;
+  schemaVersion: 1;
+  implementation: "whisper-cli";
+  implementationVersion: string;
+  modelFilename: string;
+  modelChecksum: string;
+  language: string;
+  startedAt: string;
+  completedAt: string;
+  status: ProcessingAttemptStatus;
+  exitStatus: number | null;
+  diagnostic: string | null;
+}
+
 export interface KnowledgeSearchResult {
   position: number;
   recordId: string;

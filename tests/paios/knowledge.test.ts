@@ -22,6 +22,11 @@ import {
   withNormalizedAudio,
 } from "../../src/paios/knowledge/audio-normalizer.js";
 import {
+  AudioTranscriptionError,
+  type TranscriptionProcessRunner,
+  transcribeNormalizedAudio,
+} from "../../src/paios/knowledge/audio-transcriber.js";
+import {
   parseKnowledgeCommand,
   type KnowledgeCommand,
 } from "../../src/paios/knowledge/commands.js";
@@ -46,6 +51,10 @@ import {
   searchRecords,
 } from "../../src/paios/knowledge/records.js";
 import { indexRepository } from "../../src/paios/knowledge/repository-index.js";
+import {
+  listProcessingAttempts,
+  recordProcessingAttempt,
+} from "../../src/paios/knowledge/processing-attempts.js";
 import { assertKnowledgeRuntime } from "../../src/paios/knowledge/runtime.js";
 
 const temporaryRoots: string[] = [];
@@ -757,6 +766,177 @@ test("FFmpeg normalizer accepts the Telegram-compatible OGG Opus contract", () =
   assert.deepEqual(readdirNames(temporary), []);
 });
 
+test("whisper-cli transcriber uses deterministic arguments and cleans output", () => {
+  const root = temporaryRoot();
+  const temporary = join(root, "temporary");
+  const normalizedPath = join(root, "normalized.wav");
+  const modelPath = join(root, "ggml-base.bin");
+  writeFileSync(normalizedPath, canonicalWavFixture());
+  writeFileSync(modelPath, "model fixture");
+  let observedOutputPath = "";
+  const runner: TranscriptionProcessRunner = (command, args, timeoutMs) => {
+    assert.equal(command, "/configured/whisper-cli");
+    assert.equal(timeoutMs, 9_876);
+    assert.deepEqual(args.slice(0, 8), [
+      "-m",
+      modelPath,
+      "-f",
+      normalizedPath,
+      "-l",
+      "uk",
+      "-otxt",
+      "-of",
+    ]);
+    assert.deepEqual(args.slice(9), ["-np", "-nt"]);
+    observedOutputPath = `${args[8]}.txt`;
+    writeFileSync(observedOutputPath, "\uFEFFПерший рядок\r\nДругий рядок\n");
+    return { status: 0, stderr: "" };
+  };
+
+  const result = transcribeNormalizedAudio(normalizedPath, {
+    whisperCommand: "/configured/whisper-cli",
+    whisperVersion: "whisper.cpp 1.7.6",
+    modelPath,
+    temporaryRoot: temporary,
+    language: "uk",
+    timeoutMs: 9_876,
+    runProcess: runner,
+  });
+
+  assert.equal(result.transcript, "Перший рядок\nДругий рядок");
+  assert.equal(result.implementation, "whisper-cli");
+  assert.equal(result.implementationVersion, "whisper.cpp 1.7.6");
+  assert.equal(result.modelFilename, "ggml-base.bin");
+  assert.match(result.modelChecksum, /^[0-9a-f]{64}$/);
+  assert.equal(result.language, "uk");
+  assert.equal(result.exitStatus, 0);
+  assert.ok(!existsSync(observedOutputPath));
+  assert.deepEqual(readdirNames(temporary), []);
+});
+
+test("whisper-cli transcriber classifies process failures and redacts paths", () => {
+  const cases: {
+    name: string;
+    result: ReturnType<TranscriptionProcessRunner>;
+    failure: AudioTranscriptionError["failure"];
+    message: RegExp;
+  }[] = [
+    {
+      name: "missing executable",
+      result: {
+        status: null,
+        error: Object.assign(new Error("missing"), { code: "ENOENT" }),
+        stderr: "",
+      },
+      failure: "missing-executable",
+      message: /PAIOS_WHISPER_CLI_PATH/,
+    },
+    {
+      name: "timeout",
+      result: {
+        status: null,
+        error: Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }),
+        stderr: "",
+      },
+      failure: "timeout",
+      message: /9876 ms/,
+    },
+    {
+      name: "nonzero exit",
+      result: {
+        status: 7,
+        stderr: "failed using MODEL INPUT OUTPUT",
+      },
+      failure: "process-failed",
+      message: /status 7/,
+    },
+  ];
+
+  for (const item of cases) {
+    const root = temporaryRoot();
+    const temporary = join(root, "temporary");
+    const normalizedPath = join(root, "private", "normalized.wav");
+    const modelPath = join(root, "private", "ggml-base.bin");
+    mkdirSync(join(root, "private"));
+    writeFileSync(normalizedPath, canonicalWavFixture());
+    writeFileSync(modelPath, "model fixture");
+    const command = join(root, "private", "whisper-cli");
+    const runner: TranscriptionProcessRunner = (_command, args) => ({
+      ...item.result,
+      stderr: item.result.stderr
+        .replace("MODEL", modelPath)
+        .replace("INPUT", normalizedPath)
+        .replace("OUTPUT", args[8] ?? ""),
+    });
+
+    assert.throws(
+      () =>
+        transcribeNormalizedAudio(normalizedPath, {
+          whisperCommand: command,
+          whisperVersion: "test",
+          modelPath,
+          temporaryRoot: temporary,
+          timeoutMs: 9_876,
+          runProcess: runner,
+        }),
+      (error: unknown) =>
+        error instanceof AudioTranscriptionError &&
+        error.failure === item.failure &&
+        item.message.test(error.message) &&
+        !error.message.includes(root),
+      item.name,
+    );
+    assert.deepEqual(readdirNames(temporary), []);
+  }
+});
+
+test("whisper-cli transcriber rejects invalid model and malformed output", () => {
+  const root = temporaryRoot();
+  const temporary = join(root, "temporary");
+  const normalizedPath = join(root, "normalized.wav");
+  const modelPath = join(root, "ggml-base.bin");
+  writeFileSync(normalizedPath, canonicalWavFixture());
+
+  assert.throws(
+    () =>
+      transcribeNormalizedAudio(normalizedPath, {
+        whisperCommand: "whisper-cli",
+        whisperVersion: "test",
+        modelPath,
+        temporaryRoot: temporary,
+        runProcess: () => {
+          throw new Error("process must not run");
+        },
+      }),
+    (error: unknown) =>
+      error instanceof AudioTranscriptionError &&
+      error.failure === "invalid-model",
+  );
+
+  writeFileSync(modelPath, "model fixture");
+  for (const output of [null, Buffer.from([0xc3, 0x28]), Buffer.from(" \n")]) {
+    assert.throws(
+      () =>
+        transcribeNormalizedAudio(normalizedPath, {
+          whisperCommand: "whisper-cli",
+          whisperVersion: "test",
+          modelPath,
+          temporaryRoot: temporary,
+          runProcess: (_command, args) => {
+            if (output !== null) {
+              writeFileSync(`${args[8]}.txt`, output);
+            }
+            return { status: 0, stderr: "" };
+          },
+        }),
+      (error: unknown) =>
+        error instanceof AudioTranscriptionError &&
+        error.failure === "invalid-output",
+    );
+    assert.deepEqual(readdirNames(temporary), []);
+  }
+});
+
 test("audio import preserves original bytes and provider-neutral media metadata", () => {
   const root = temporaryRoot();
   const dataRoot = join(root, "knowledge");
@@ -781,6 +961,69 @@ test("audio import preserves original bytes and provider-neutral media metadata"
     original,
   );
   assert.deepEqual(getRecord(dataRoot, record.id), record);
+});
+
+test("processing attempts persist immutable versioned transcription metadata", () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const audioPath = join(root, "voice.wav");
+  writeFileSync(audioPath, wavFixture());
+  const record = addAudio(dataRoot, audioPath);
+  const startedAt = "2026-06-22T20:00:00.000Z";
+  const completedAt = "2026-06-22T20:00:03.000Z";
+
+  const attempt = recordProcessingAttempt(dataRoot, {
+    recordId: record.id,
+    implementationVersion: "whisper.cpp 1.7.6",
+    modelFilename: "ggml-base.bin",
+    modelChecksum: "a".repeat(64),
+    language: "auto",
+    startedAt,
+    completedAt,
+    status: "failed",
+    exitStatus: 7,
+    diagnostic: "x".repeat(700),
+  });
+
+  assert.equal(attempt.recordId, record.id);
+  assert.equal(attempt.schemaVersion, 1);
+  assert.equal(attempt.implementation, "whisper-cli");
+  assert.equal(attempt.status, "failed");
+  assert.equal(attempt.exitStatus, 7);
+  assert.equal(attempt.diagnostic?.length, 500);
+  assert.deepEqual(listProcessingAttempts(dataRoot, record.id), [attempt]);
+  assert.deepEqual(getRecord(dataRoot, record.id), record);
+});
+
+test("processing attempts reject invalid metadata and non-audio records", () => {
+  const dataRoot = temporaryRoot();
+  const note = addNote(dataRoot, { content: "not audio" });
+  const base = {
+    recordId: note.id,
+    implementationVersion: "test",
+    modelFilename: "ggml-base.bin",
+    modelChecksum: "a".repeat(64),
+    language: "auto",
+    startedAt: "2026-06-22T20:00:00.000Z",
+    completedAt: "2026-06-22T20:00:01.000Z",
+    status: "succeeded" as const,
+    exitStatus: 0,
+    diagnostic: null,
+  };
+
+  assert.throws(
+    () => recordProcessingAttempt(dataRoot, base),
+    /existing audio record/,
+  );
+  assert.throws(
+    () =>
+      recordProcessingAttempt(dataRoot, {
+        ...base,
+        recordId: "missing",
+        modelChecksum: "invalid",
+      }),
+    /Invalid processing-attempt metadata/,
+  );
 });
 
 test("audio detection supports MP3, M4A, and Telegram-compatible OGG Opus", () => {
@@ -932,7 +1175,7 @@ test("schema version one data migrates without changing durable records", () => 
     const version = migrated
       .prepare("SELECT version FROM schema_metadata WHERE id = 1")
       .get() as { version: number };
-    assert.equal(version.version, 3);
+    assert.equal(version.version, 4);
   } finally {
     migrated.close();
   }

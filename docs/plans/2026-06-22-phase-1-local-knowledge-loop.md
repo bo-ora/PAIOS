@@ -55,8 +55,15 @@ text, repository documents, inbox files, and local audio transcription.
   input, requests canonical 16 kHz mono signed 16-bit PCM WAV, validates the
   result, redacts diagnostics, supports the OGG/Opus contract, and removes
   temporary state on every exit path.
-- Next: Timeout-bound `whisper-cli` transcription and durable processing-attempt
-  metadata.
+- 2026-06-22: Timeout-bound `whisper-cli` transcription completed behind a
+  deterministic process seam using explicit model, language, text-output, and
+  no-timestamp arguments. The adapter validates and hashes the local model,
+  normalizes UTF-8 transcript output, bounds and redacts failure diagnostics,
+  and removes temporary output on every exit path. Schema version 4 adds
+  immutable, versioned processing-attempt metadata linked to audio records.
+- Next: Connect normalization, transcription, and processing-attempt recording
+  to pending audio records; commit transcript text through the existing FTS
+  path while preserving retry identity.
 
 ## Delivery Sequence
 

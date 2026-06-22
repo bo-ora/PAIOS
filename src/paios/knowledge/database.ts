@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const schemaVersion = 3;
+const schemaVersion = 4;
 
 const recordsSchema = `
   CREATE TABLE IF NOT EXISTS records (
@@ -58,6 +58,29 @@ const recordsSchema = `
     INSERT INTO record_search(rowid, title, normalized_text)
     VALUES (new.internal_id, new.title, new.normalized_text);
   END;
+`;
+
+const processingAttemptsSchema = `
+  CREATE TABLE IF NOT EXISTS processing_attempts (
+    internal_id INTEGER PRIMARY KEY,
+    id TEXT NOT NULL UNIQUE,
+    record_id TEXT NOT NULL,
+    schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+    implementation TEXT NOT NULL CHECK (implementation = 'whisper-cli'),
+    implementation_version TEXT NOT NULL,
+    model_filename TEXT NOT NULL,
+    model_checksum TEXT NOT NULL,
+    language TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed')),
+    exit_status INTEGER,
+    diagnostic TEXT,
+    FOREIGN KEY (record_id) REFERENCES records(id) ON DELETE CASCADE
+  ) STRICT;
+
+  CREATE INDEX IF NOT EXISTS processing_attempts_record
+  ON processing_attempts(record_id, started_at, internal_id);
 `;
 
 const migrateVersionOne = `
@@ -134,17 +157,25 @@ export function openKnowledgeDatabase(dataRoot: string): KnowledgeDatabase {
       .get() as { version: number } | undefined;
     if (version === undefined) {
       database.exec(recordsSchema);
+      database.exec(processingAttemptsSchema);
       database
         .prepare("INSERT INTO schema_metadata(id, version) VALUES (1, ?)")
         .run(schemaVersion);
-    } else if (version.version === 1 || version.version === 2) {
+    } else if (
+      version.version === 1 ||
+      version.version === 2 ||
+      version.version === 3
+    ) {
       database.exec("BEGIN IMMEDIATE");
       try {
         if (version.version === 1) {
           database.exec(migrateVersionOne);
         }
-        database.exec(migrateVersionTwo);
+        if (version.version === 1 || version.version === 2) {
+          database.exec(migrateVersionTwo);
+        }
         database.exec(recordsSchema);
+        database.exec(processingAttemptsSchema);
         database.exec(
           "INSERT INTO record_search(record_search) VALUES ('rebuild');",
         );
@@ -158,6 +189,7 @@ export function openKnowledgeDatabase(dataRoot: string): KnowledgeDatabase {
       }
     } else if (version.version === schemaVersion) {
       database.exec(recordsSchema);
+      database.exec(processingAttemptsSchema);
     } else {
       throw new Error("Unsupported knowledge database schema.");
     }
