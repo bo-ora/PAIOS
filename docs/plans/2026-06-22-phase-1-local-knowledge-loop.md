@@ -26,6 +26,15 @@ text, repository documents, inbox files, and local audio transcription.
   transcription interfaces.
 - Each slice must leave the CLI buildable and tested.
 
+## Progress
+
+- 2026-06-22: Runtime/CLI foundation and the first durable storage vertical
+  slice completed. Node.js 24, provider-neutral provenance types, configurable
+  data roots, SQLite/FTS5 capability checks and schema, atomic note source
+  storage, `add-note`, `show`, duplicate detection, and failed-write resume are
+  implemented and verified.
+- Next: Markdown/plain-text import and lexical search/rebuild.
+
 ## Delivery Sequence
 
 ### 1. Runtime and CLI Foundation

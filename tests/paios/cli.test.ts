@@ -120,7 +120,16 @@ test("invalid usage exits two without collecting status", () => {
   assert.deepEqual(captured.stdout, []);
   assert.equal(
     captured.stderr.join(""),
-    "Usage: ./paios status [--json]\n",
+    "Usage: ./paios status [--json]\n" +
+      "Usage:\n" +
+      "  ./paios knowledge add-note [--title TITLE] [--text TEXT] [--data-root PATH]\n" +
+      "  ./paios knowledge show RECORD_ID [--data-root PATH]\n" +
+      "  ./paios knowledge add-file PATH [--data-root PATH]\n" +
+      "  ./paios knowledge add-audio PATH [--data-root PATH]\n" +
+      "  ./paios knowledge index PATH [--data-root PATH]\n" +
+      "  ./paios knowledge ingest-inbox [--data-root PATH]\n" +
+      "  ./paios knowledge search QUERY [--data-root PATH]\n" +
+      "  ./paios knowledge rebuild [--data-root PATH]\n",
   );
 });
 

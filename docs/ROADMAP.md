@@ -11,7 +11,7 @@ visual projection of the phase table. If they disagree, the table wins.
 ## Current Position
 
 - Current phase: **Phase 1 — Local Knowledge Loop**
-- State: **approved**
+- State: **in-progress**
 - Current value target: capture personal knowledge locally and find it later
   with source references.
 - Next candidate: **Phase 2 — Telegram Daily Assistant**
@@ -24,7 +24,7 @@ visual projection of the phase table. If they disagree, the table wins.
 ```mermaid
 flowchart LR
     P0["Phase 0<br/>Development Operating System<br/>COMPLETED"]
-    P1["Phase 1<br/>Local Knowledge Loop<br/>APPROVED"]
+    P1["Phase 1<br/>Local Knowledge Loop<br/>IN PROGRESS"]
     P2["Phase 2<br/>Telegram Daily Assistant<br/>PROPOSED"]
     P3["Phase 3<br/>Health Journal<br/>PROVISIONAL"]
     P4["Phase 4<br/>Wearable Health Intelligence<br/>PROVISIONAL"]
@@ -40,7 +40,7 @@ flowchart LR
 | Phase | State | User value | Main deliverables | Depends on | Exit criteria |
 | --- | --- | --- | --- | --- | --- |
 | **0 — Development Operating System** | `completed` | PAIOS can be developed consistently and resumed after time away. | Codex operating model; requirements/ADR/plan/session/audit structure; RED–GREEN capability evaluations; repository validation; local raw-session capture; TypeScript `./paios status`; roadmap and debt tracking; one audited delivery cycle. | None | Status CLI passes lint, typecheck, tests, build, human/JSON acceptance checks; roadmap appears in status; CI, delivery session, process audit, and phase review are committed. |
-| **1 — Local Knowledge Loop** | `approved` | Capture personal knowledge locally and find it later with sources. | CLI and inbox capture; Markdown/text and repository-document ingestion; audio-file transcription; local durable storage; lexical/full-text search; sourced retrieval. | Phase 0 | A note, document, and audio recording can each be captured, stored, searched, and retrieved offline with source references. |
+| **1 — Local Knowledge Loop** | `in-progress` | Capture personal knowledge locally and find it later with sources. | CLI and inbox capture; Markdown/text and repository-document ingestion; audio-file transcription; local durable storage; lexical/full-text search; sourced retrieval. | Phase 0 | A note, document, and audio recording can each be captured, stored, searched, and retrieved offline with source references. |
 | **2 — Telegram Daily Assistant** | `proposed` | Use PAIOS naturally during daily life from Telegram. | Telegram workspace model; text, voice, and document capture; transcription; knowledge search; source-backed answers; safe command/approval boundaries. | Phase 1 | Telegram can capture supported inputs and answer from the local knowledge base with traceable sources and no silent data loss. |
 | **3 — Health Journal** | `provisional` | Understand manually recorded health observations before relying on wearable APIs. | Symptoms, habits, workouts, sleep observations, manual measurements, CSV/JSON imports, sourced trend reports. | Phase 1; optionally Phase 2 | The user can record and import health data, review trends, and trace every conclusion to source records. |
 | **4 — Wearable Health Intelligence** | `provisional` | Automate collection and analysis of health metrics. | Replaceable wearable adapters; normalized health model; synchronization; anomalies; trends; correlations; recommendation safeguards. | Phase 3 | At least one wearable provider synchronizes reliably through an adapter, and normalized insights remain traceable and recoverable. |

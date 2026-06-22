@@ -50,6 +50,11 @@ jobs:
           ./paios status
           ./paios status --json > /tmp/paios-status.json
           node --eval "JSON.parse(require('node:fs').readFileSync('/tmp/paios-status.json', 'utf8'))"
+          data_root=$(mktemp -d)
+          output=$(printf '%s\n' "CI knowledge note" | ./paios knowledge add-note --title "CI" --data-root "$data_root")
+          record_id=$(printf '%s\n' "$output" | sed -n 's/^Captured note //p')
+          ./paios knowledge show "$record_id" --data-root "$data_root"
+          rm -rf "$data_root"
 
       - name: Test Python tooling
         run: python3 -m unittest discover -s tests -v

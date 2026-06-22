@@ -59,3 +59,33 @@ export interface ProjectStatus {
   technicalDebt: TechnicalDebtStatus;
   warnings: string[];
 }
+
+export type KnowledgeSourceType =
+  | "note"
+  | "managed-file"
+  | "indexed-file"
+  | "audio";
+
+export type KnowledgeProcessingState = "pending" | "ready" | "failed";
+
+export interface SourceProvenance {
+  adapter: string;
+  externalReference?: Record<string, string>;
+  originalName?: string;
+  claimedMimeType?: string;
+  detectedMediaType?: string;
+  byteLength: number;
+  checksum: string;
+}
+
+export interface KnowledgeRecord {
+  id: string;
+  sourceType: KnowledgeSourceType;
+  title: string | null;
+  sourceReference: string;
+  capturedAt: string;
+  state: KnowledgeProcessingState;
+  normalizedText: string;
+  provenance: SourceProvenance;
+  error: string | null;
+}

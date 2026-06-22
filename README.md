@@ -12,10 +12,10 @@ agent orchestration, and additional personal workflows.
 
 ## Project Status
 
-PAIOS has completed **Phase 0 — Development Operating System** and is refining
-requirements for **Phase 1 — Local Knowledge Loop**. The repository-local
-TypeScript Project Status CLI makes project state, roadmap position, pending
-work, and technical debt easy to understand after time away.
+PAIOS has completed **Phase 0 — Development Operating System** and is
+implementing **Phase 1 — Local Knowledge Loop**. The repository-local TypeScript
+CLI reports project state and now provides the first durable local note-capture
+slice.
 
 - [Roadmap and current phase](docs/ROADMAP.md)
 - [Technical debt register](docs/TECH_DEBT.md)
@@ -37,7 +37,7 @@ work, and technical debt easy to understand after time away.
 
 ## Project Status CLI
 
-Node.js 20 or newer and npm are required. Install the pinned development
+Node.js 24 or newer and npm are required. Install the pinned development
 tooling and build the generated, untracked `dist/` output:
 
 ```bash
@@ -57,6 +57,23 @@ Read the current repository state in human or JSON form:
 
 The command is read-only, offline, and has no runtime npm dependencies. It
 derives status directly from Git and repository Markdown.
+
+## Local Knowledge CLI
+
+Capture a note from stdin and inspect its durable record:
+
+```bash
+printf '%s\n' "Content" | ./paios knowledge add-note --title "Optional title"
+./paios knowledge show RECORD_ID
+```
+
+The default ignored data root is `.local/paios/knowledge/`. Override it with
+`--data-root PATH` or `PAIOS_DATA_ROOT`. Note source bytes are stored separately
+from transactional SQLite metadata and rebuildable FTS5 search state.
+
+The remaining document, repository, inbox, search, rebuild, and audio commands
+are reserved by the CLI namespace and will be implemented in subsequent Phase 1
+slices.
 
 ## Validate the Repository
 
