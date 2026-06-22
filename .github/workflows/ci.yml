@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint TypeScript
+        run: npm run lint
+
+      - name: Type-check TypeScript
+        run: npm run typecheck
+
+      - name: Test TypeScript
+        run: npm test
+
+      - name: Build CLI
+        run: npm run build
+
+      - name: Smoke-test CLI
+        run: |
+          ./paios status
+          ./paios status --json > /tmp/paios-status.json
+          node --eval "JSON.parse(require('node:fs').readFileSync('/tmp/paios-status.json', 'utf8'))"
+
+      - name: Test Python tooling
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Validate repository knowledge
+        run: python3 scripts/validate_repository.py .
+
+      - name: Check whitespace
+        run: git diff --check

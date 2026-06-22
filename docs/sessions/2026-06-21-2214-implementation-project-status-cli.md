@@ -2,7 +2,7 @@
 
 Date: 2026-06-22
 Role: implementation
-Status: partial
+Status: completed
 
 ## Objective
 
@@ -76,10 +76,6 @@ capability was changed.
 
 ## Blockers and Open Questions
 
-- Pushing `master` is blocked because the HTTPS remote has no available GitHub
-  credentials. GitHub CLI is not installed and SSH authentication is not
-  configured. The verified local commit remains one commit ahead of
-  `origin/master`.
 - Phase 0 completion still requires an explicit roadmap/vision review and state
   transition decision.
 - TD-003 should be reassessed because stable CLI and repository validation
@@ -107,7 +103,6 @@ unavailable because this interactive session was not captured through
 ## Follow-up
 
 1. Review Phase 0 exit criteria and decide whether to mark Phase 0 completed.
-2. Configure GitHub HTTPS or SSH authentication and push local `master`.
-3. Reassess TD-003 and decide whether CI enforcement belongs before Phase 1.
-4. If Phase 0 completes, update `docs/ROADMAP.md` through a dated roadmap review.
-5. Begin formal requirements discovery for Phase 1 — Local Knowledge Loop.
+2. Reassess TD-003 and decide whether CI enforcement belongs before Phase 1.
+3. If Phase 0 completes, update `docs/ROADMAP.md` through a dated roadmap review.
+4. Begin formal requirements discovery for Phase 1 — Local Knowledge Loop.

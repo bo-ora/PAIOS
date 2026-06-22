@@ -57,7 +57,7 @@ function listItems(content: string): string[] {
   const items: string[] = [];
   let current: string | null = null;
   for (const line of content.split(/\r?\n/)) {
-    const match = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+?)\s*$/);
+    const match = /^\s*(?:[-*]|\d+\.)\s+(.+?)\s*$/.exec(line);
     if (match?.[1] !== undefined) {
       if (current !== null) {
         items.push(current);
@@ -77,7 +77,7 @@ function listItems(content: string): string[] {
 }
 
 function metadataValue(content: string, key: string): string | null {
-  const match = content.match(new RegExp(`^${key}:\\s*(.+?)\\s*$`, "m"));
+  const match = new RegExp(`^${key}:\\s*(.+?)\\s*$`, "m").exec(content);
   return match?.[1] ?? null;
 }
 
@@ -155,7 +155,7 @@ export function collectPendingPlanItems(root: string): PendingPlanItem[] {
     const content = readFileSync(path, "utf8");
     let current: PendingPlanItem | null = null;
     for (const line of content.split(/\r?\n/)) {
-      const checkbox = line.match(/^\s*-\s+\[([ xX])\]\s+(.+?)\s*$/);
+      const checkbox = /^\s*-\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line);
       if (checkbox !== null) {
         if (current !== null) {
           items.push(current);
@@ -215,7 +215,7 @@ export function collectRoadmap(
       continue;
     }
     const phaseCell = plainCell(cells[0] ?? "");
-    const match = phaseCell.match(/^(\d+)\s+[—-]\s+(.+)$/);
+    const match = /^(\d+)\s+[—-]\s+(.+)$/.exec(phaseCell);
     if (match?.[1] === undefined || match[2] === undefined) {
       warnings.push(`Malformed ${path}: invalid phase cell "${phaseCell}"`);
       continue;

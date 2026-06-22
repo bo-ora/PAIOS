@@ -60,6 +60,7 @@ agents editing shared files, and require concise evidence-backed summaries.
 
 ```bash
 npm ci
+npm run lint
 npm run typecheck
 npm test
 npm run build

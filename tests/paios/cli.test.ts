@@ -6,6 +6,7 @@ import { afterEach, test } from "node:test";
 
 import { runCli } from "../../src/paios/cli.js";
 import { formatHuman } from "../../src/paios/format.js";
+import type { ProjectStatus } from "../../src/paios/types.js";
 import {
   createRepositoryFixture,
   type RepositoryFixture,
@@ -72,7 +73,7 @@ test("human and JSON modes render equivalent status facts", () => {
   assert.equal(runCli(["status", "--json"], root, jsonCapture.io), 0);
   assert.equal(runCli(["status"], root, humanCapture.io), 0);
 
-  const status = JSON.parse(jsonCapture.stdout.join(""));
+  const status = JSON.parse(jsonCapture.stdout.join("")) as ProjectStatus;
   assert.equal(humanCapture.stdout.join(""), formatHuman(status));
   assert.match(humanCapture.stdout.join(""), /Git: master — clean/);
   assert.match(

@@ -42,6 +42,7 @@ tooling and build the generated, untracked `dist/` output:
 
 ```bash
 npm ci
+npm run lint
 npm run typecheck
 npm test
 npm run build
@@ -61,6 +62,7 @@ derives status directly from Git and repository Markdown.
 
 ```bash
 npm run typecheck
+npm run lint
 npm test
 npm run build
 python3 -m unittest discover -s tests -v

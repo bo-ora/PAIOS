@@ -37,6 +37,7 @@ TypeScript and Node type definitions are development dependencies:
 - `git status --short --branch` — review local changes and the active branch.
 - `git diff --check` — detect whitespace errors before committing.
 - `npm ci` — install pinned CLI development tooling.
+- `npm run lint` — run type-aware ESLint checks for CLI source and tests.
 - `npm run typecheck` — type-check CLI source and tests.
 - `npm test` — compile and run the Node built-in test suite.
 - `npm run build` — compile the CLI into ignored `dist/` output.

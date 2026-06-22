@@ -17,7 +17,7 @@ const requiredScenarioKeys = [
   "scoring",
 ] as const;
 
-const markdownRules: ReadonlyArray<readonly [string, readonly string[]]> = [
+const markdownRules: readonly (readonly [string, readonly string[]])[] = [
   [
     "docs/architecture/decisions",
     [

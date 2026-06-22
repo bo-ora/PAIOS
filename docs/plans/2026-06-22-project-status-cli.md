@@ -175,8 +175,7 @@ documents so production code reads realistic current-working-tree state.
 - [x] Record exact evidence, remaining questions, and follow-up in the session
       closeout.
 - [x] Commit verified work directly to `master`.
-- [ ] Push the verified commit to `origin/master` after GitHub authentication
-      is available.
+- [x] Push the verified commit to `origin/master`.
 
 ## Plan Review
 

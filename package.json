@@ -8,11 +8,15 @@
   },
   "scripts": {
     "build": "node --eval \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "lint": "eslint src tests/paios",
     "test": "node --eval \"require('node:fs').rmSync('.test-dist',{recursive:true,force:true})\" && tsc -p tsconfig.test.json && node --test .test-dist/tests/paios/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/node": "^24.0.0",
-    "typescript": "^5.9.0"
+    "eslint": "^9.39.4",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.61.1"
   }
 }
