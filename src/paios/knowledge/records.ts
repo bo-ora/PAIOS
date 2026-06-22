@@ -8,6 +8,7 @@ import type {
   KnowledgeRecord,
   KnowledgeSearchResult,
   KnowledgeSourceType,
+  MediaDescriptor,
 } from "../types.js";
 import { openKnowledgeDatabase } from "./database.js";
 import { writeManagedSource } from "./source-files.js";
@@ -25,6 +26,8 @@ interface RecordRow {
   original_name: string | null;
   claimed_mime_type: string | null;
   detected_media_type: string | null;
+  detected_container: string | null;
+  detected_codec: string | null;
   byte_length: number;
   checksum: string;
   error_message: string | null;
@@ -80,6 +83,12 @@ function rowToRecord(row: RecordRow): KnowledgeRecord {
       ...(row.detected_media_type === null
         ? {}
         : { detectedMediaType: row.detected_media_type }),
+      ...(row.detected_container === null
+        ? {}
+        : { detectedContainer: row.detected_container }),
+      ...(row.detected_codec === null
+        ? {}
+        : { detectedCodec: row.detected_codec }),
       byteLength: row.byte_length,
       checksum: row.checksum,
     },
@@ -93,7 +102,7 @@ function selectById(database: DatabaseSync, id: string): RecordRow | undefined {
       SELECT id, source_type, title, source_reference, captured_at, state,
              normalized_text, source_adapter, external_reference_json,
              original_name, claimed_mime_type, detected_media_type, byte_length,
-             checksum, error_message
+             detected_container, detected_codec, checksum, error_message
       FROM records
       WHERE id = ?
     `)
@@ -109,7 +118,7 @@ function selectByChecksum(
       SELECT id, source_type, title, source_reference, captured_at, state,
              normalized_text, source_adapter, external_reference_json,
              original_name, claimed_mime_type, detected_media_type, byte_length,
-             checksum, error_message
+             detected_container, detected_codec, checksum, error_message
       FROM records
       WHERE checksum = ?
     `)
@@ -122,7 +131,7 @@ export interface AddNoteInput {
 }
 
 interface CaptureManagedInput {
-  sourceType: Extract<KnowledgeSourceType, "note" | "managed-file">;
+  sourceType: Extract<KnowledgeSourceType, "note" | "managed-file" | "audio">;
   title: string | null;
   normalizedText: string;
   sourceAdapter: string;
@@ -132,6 +141,9 @@ interface CaptureManagedInput {
   originalName: string | null;
   claimedMimeType: string | null;
   detectedMediaType: string | null;
+  detectedContainer?: string;
+  detectedCodec?: string;
+  finalState?: Extract<KnowledgeRecord["state"], "pending" | "ready">;
 }
 
 function captureManagedSource(
@@ -166,8 +178,9 @@ function captureManagedSource(
             INSERT INTO records (
               id, source_type, title, source_reference, captured_at, state,
               normalized_text, source_adapter, original_name,
-              claimed_mime_type, detected_media_type, byte_length, checksum
-            ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+              claimed_mime_type, detected_media_type, detected_container,
+              detected_codec, byte_length, checksum
+            ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
           .run(
             id,
@@ -180,6 +193,8 @@ function captureManagedSource(
             input.originalName,
             input.claimedMimeType,
             input.detectedMediaType,
+            input.detectedContainer ?? null,
+            input.detectedCodec ?? null,
             input.sourceBytes.byteLength,
             contentChecksum,
           );
@@ -197,6 +212,8 @@ function captureManagedSource(
               original_name = ?,
               claimed_mime_type = ?,
               detected_media_type = ?,
+              detected_container = ?,
+              detected_codec = ?,
               byte_length = ?,
               state = 'pending',
               error_message = NULL
@@ -208,6 +225,8 @@ function captureManagedSource(
           input.originalName,
           input.claimedMimeType,
           input.detectedMediaType,
+          input.detectedContainer ?? null,
+          input.detectedCodec ?? null,
           input.sourceBytes.byteLength,
           id,
         );
@@ -225,10 +244,8 @@ function captureManagedSource(
     }
 
     connection.database
-      .prepare(
-        "UPDATE records SET state = 'ready', error_message = NULL WHERE id = ?",
-      )
-      .run(id);
+      .prepare("UPDATE records SET state = ?, error_message = NULL WHERE id = ?")
+      .run(input.finalState ?? "ready", id);
     const record = selectById(connection.database, id);
     if (record === undefined) {
       throw new Error("Captured record could not be read.");
@@ -269,6 +286,108 @@ const supportedDocumentTypes = new Map([
 ]);
 
 export class KnowledgeInputError extends Error {}
+
+const audioMimeHints = new Map([
+  [".wav", "audio/wav"],
+  [".mp3", "audio/mpeg"],
+  [".m4a", "audio/mp4"],
+  [".ogg", "audio/ogg"],
+  [".opus", "audio/ogg"],
+]);
+
+function bytesEqualAt(
+  bytes: Uint8Array,
+  offset: number,
+  expected: string,
+): boolean {
+  if (offset + expected.length > bytes.byteLength) {
+    return false;
+  }
+  for (let index = 0; index < expected.length; index += 1) {
+    if (bytes[offset + index] !== expected.charCodeAt(index)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function detectWavCodec(bytes: Uint8Array): string {
+  let offset = 12;
+  while (offset + 8 <= bytes.byteLength) {
+    const chunkLength =
+      (bytes[offset + 4] ?? 0) |
+      ((bytes[offset + 5] ?? 0) << 8) |
+      ((bytes[offset + 6] ?? 0) << 16) |
+      ((bytes[offset + 7] ?? 0) << 24);
+    if (bytesEqualAt(bytes, offset, "fmt ") && chunkLength >= 2) {
+      const format = (bytes[offset + 8] ?? 0) | ((bytes[offset + 9] ?? 0) << 8);
+      return format === 1 ? "pcm" : format === 3 ? "pcm-float" : `wav-${format}`;
+    }
+    offset += 8 + chunkLength + (chunkLength % 2);
+  }
+  return "unknown";
+}
+
+export function describeAudioMedia(
+  bytes: Uint8Array,
+  input: {
+    sourceKind: MediaDescriptor["sourceKind"];
+    originalName?: string;
+    claimedMimeType?: string;
+  },
+): MediaDescriptor {
+  let detectedMediaType: string;
+  let detectedContainer: string;
+  let detectedCodec: string;
+
+  if (
+    bytesEqualAt(bytes, 0, "RIFF") &&
+    bytesEqualAt(bytes, 8, "WAVE")
+  ) {
+    detectedMediaType = "audio/wav";
+    detectedContainer = "wav";
+    detectedCodec = detectWavCodec(bytes);
+  } else if (
+    bytesEqualAt(bytes, 0, "ID3") ||
+    (bytes.byteLength >= 2 &&
+      bytes[0] === 0xff &&
+      ((bytes[1] ?? 0) & 0xe0) === 0xe0)
+  ) {
+    detectedMediaType = "audio/mpeg";
+    detectedContainer = "mp3";
+    detectedCodec = "mp3";
+  } else if (bytesEqualAt(bytes, 4, "ftyp")) {
+    detectedMediaType = "audio/mp4";
+    detectedContainer = "mp4";
+    detectedCodec = "unknown";
+  } else if (
+    bytesEqualAt(bytes, 0, "OggS") &&
+    bytesEqualAt(bytes, 28, "OpusHead")
+  ) {
+    detectedMediaType = "audio/ogg";
+    detectedContainer = "ogg";
+    detectedCodec = "opus";
+  } else {
+    throw new KnowledgeInputError(
+      "Unsupported or unrecognized audio content; use WAV, MP3, or M4A.",
+    );
+  }
+
+  return {
+    sourceKind: input.sourceKind,
+    ...(input.originalName === undefined
+      ? {}
+      : { originalName: input.originalName }),
+    ...(input.claimedMimeType === undefined
+      ? {}
+      : { claimedMimeType: input.claimedMimeType }),
+    detectedMediaType,
+    detectedContainer,
+    detectedCodec,
+    byteLength: bytes.byteLength,
+    checksum: checksum(bytes),
+  };
+}
 
 function decodeUtf8(bytes: Uint8Array): string {
   try {
@@ -320,6 +439,48 @@ export function addFile(dataRoot: string, path: string): KnowledgeRecord {
     originalName,
     claimedMimeType: mediaType,
     detectedMediaType: mediaType,
+  });
+}
+
+export function addAudio(dataRoot: string, path: string): KnowledgeRecord {
+  let stats;
+  try {
+    stats = statSync(path);
+  } catch {
+    throw new KnowledgeInputError("Audio could not be read.");
+  }
+  if (!stats.isFile()) {
+    throw new KnowledgeInputError("Audio path must reference a file.");
+  }
+
+  let bytes: Buffer;
+  try {
+    bytes = readFileSync(path);
+  } catch {
+    throw new KnowledgeInputError("Audio could not be read.");
+  }
+  const originalName = basename(path);
+  const claimedMimeType = audioMimeHints.get(extname(path).toLowerCase());
+  const descriptor = describeAudioMedia(bytes, {
+    sourceKind: "local-file",
+    originalName,
+    ...(claimedMimeType === undefined ? {} : { claimedMimeType }),
+  });
+
+  return captureManagedSource(dataRoot, {
+    sourceType: "audio",
+    title: originalName,
+    normalizedText: "",
+    sourceAdapter: "cli-audio",
+    sourceDirectory: "audio",
+    sourceExtension: `.${descriptor.detectedContainer}`,
+    sourceBytes: bytes,
+    originalName,
+    claimedMimeType: claimedMimeType ?? null,
+    detectedMediaType: descriptor.detectedMediaType,
+    detectedContainer: descriptor.detectedContainer,
+    detectedCodec: descriptor.detectedCodec,
+    finalState: "pending",
   });
 }
 

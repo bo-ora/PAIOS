@@ -74,9 +74,10 @@ The default ignored data root is `.local/paios/knowledge/`. Override it with
 `--data-root PATH` or `PAIOS_DATA_ROOT`. Note source bytes are stored separately
 from transactional SQLite metadata and rebuildable FTS5 search state.
 
-Markdown/text import, search, and rebuild are implemented. Repository indexing,
-inbox processing, and audio commands remain reserved for subsequent Phase 1
-slices.
+Markdown/text import, repository indexing, deterministic inbox processing,
+search, and rebuild are implemented. `knowledge add-audio` now preserves
+content-validated audio and provider-neutral media metadata in a pending record;
+local normalization and transcription remain the next slice.
 
 See [HOW_TO_USE.md](HOW_TO_USE.md) for short, verified scenarios and expected
 behavior.

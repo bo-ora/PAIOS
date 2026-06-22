@@ -108,6 +108,55 @@ Use quotes for an exact phrase:
 Each result includes its order, record identifier, source type, managed source
 reference, capture time, numeric rank, and highlighted excerpt.
 
+## Index a Repository or Directory
+
+Index UTF-8 Markdown and plain-text files in place:
+
+```bash
+./paios knowledge index docs
+```
+
+Files are traversed in stable path order. PAIOS does not copy or modify indexed
+files; their original paths remain authoritative. The command reports indexed,
+unchanged, updated, skipped, missing, and failed counts. Unsupported files and
+symlinks are skipped, and symlinks are never followed.
+
+Run the same command again after files change or move. Unchanged files retain
+their records, changed files update in place, and deleted or invalid sources are
+marked failed so stale text no longer appears in search. A partial indexing
+failure prints all counts and exits nonzero.
+
+## Process the Local Inbox
+
+Place Markdown and text files under the inbox next to the configured knowledge
+data root, then process them in stable relative-path order:
+
+```bash
+mkdir -p .local/paios/inbox
+printf '%s\n' "Inbox knowledge" > .local/paios/inbox/example.md
+./paios knowledge ingest-inbox
+```
+
+Successfully imported files move to `.local/paios/inbox-processed/` only after
+their durable records exist. Duplicate files also move when the matching
+durable record already exists, which makes a rerun recover an interrupted move.
+Unsupported entries and failed inputs remain in the inbox. WAV, MP3, and M4A
+files are recognized but remain failed until local audio processing is added.
+
+## Import Audio for Local Processing
+
+Preserve a WAV, MP3, or M4A source as a durable pending audio record:
+
+```bash
+./paios knowledge add-audio PATH
+```
+
+The command validates the media signature rather than trusting the filename,
+stores the unchanged source under the configured data root, and records detected
+container and codec metadata. Local FFmpeg normalization and Whisper
+transcription are not implemented yet, so the record remains `pending` and is
+not searchable.
+
 ## Rebuild the Search Index
 
 Recreate the derived FTS5 index from durable SQLite records:
@@ -158,11 +207,5 @@ git diff --check
 
 ## Not Implemented Yet
 
-The CLI reserves these Phase 1 commands, but they are not usable yet:
-
-- `knowledge add-audio`
-- `knowledge index`
-- `knowledge ingest-inbox`
-
-Add a scenario here only after its implementation and verification are
-committed.
+Audio normalization, local Whisper transcription, and searchable transcript
+storage remain to be implemented.

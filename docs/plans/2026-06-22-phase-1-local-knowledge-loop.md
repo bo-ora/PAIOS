@@ -36,7 +36,17 @@ text, repository documents, inbox files, and local audio transcription.
 - 2026-06-22: Managed UTF-8 Markdown/plain-text import, deterministic FTS5
   search, phrase queries, excerpts, source references, update triggers, and
   derived-index rebuild completed.
-- Next: repository indexing and deletion/stale-source handling.
+- 2026-06-22: Stable-order repository/directory indexing, idempotent updates,
+  symlink skipping, deterministic counts, source timestamps, and stale-source
+  suppression for deleted, unreadable, or invalid files completed.
+- 2026-06-22: Deterministic recursive inbox discovery, document import reuse,
+  post-commit moves, duplicate move recovery, retained failures, and
+  per-input/count reporting completed.
+- 2026-06-22: Provider-neutral audio descriptors, content-signature detection
+  for WAV, MP3, M4A, and OGG/Opus contracts, durable original-audio storage,
+  detected container/codec metadata, schema migration, and pending
+  `knowledge add-audio` records completed.
+- Next: FFmpeg normalization and `whisper-cli` transcription adapters.
 
 ## Delivery Sequence
 

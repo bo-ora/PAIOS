@@ -12,7 +12,9 @@ import {
   knowledgeDataRootEnvironment,
   resolveKnowledgeDataRoot,
 } from "./knowledge/config.js";
+import { ingestInbox } from "./knowledge/inbox.js";
 import {
+  addAudio,
   addFile,
   addNote,
   DuplicateKnowledgeError,
@@ -21,6 +23,7 @@ import {
   rebuildSearchIndex,
   searchRecords,
 } from "./knowledge/records.js";
+import { indexRepository } from "./knowledge/repository-index.js";
 import { assertKnowledgeRuntime } from "./knowledge/runtime.js";
 import { collectStatus } from "./status.js";
 import type {
@@ -163,6 +166,18 @@ function runKnowledge(
       );
       return 0;
     }
+    if (command.name === "add-audio") {
+      const record = addAudio(dataRoot, command.path);
+      io.stdout(
+        [
+          `Imported audio ${record.id}`,
+          `Source: ${record.sourceReference}`,
+          "Transcription: pending",
+          "",
+        ].join("\n"),
+      );
+      return 0;
+    }
     if (command.name === "search") {
       io.stdout(formatSearchResults(searchRecords(dataRoot, command.query)));
       return 0;
@@ -172,8 +187,48 @@ function runKnowledge(
       io.stdout(`Rebuilt search index for ${count} ready record(s).\n`);
       return 0;
     }
+    if (command.name === "index") {
+      const result = indexRepository(dataRoot, command.path);
+      io.stdout(
+        [
+          "Repository indexing complete.",
+          `Indexed: ${result.indexed}`,
+          `Unchanged: ${result.unchanged}`,
+          `Updated: ${result.updated}`,
+          `Skipped: ${result.skipped}`,
+          `Missing: ${result.missing}`,
+          `Failed: ${result.failed}`,
+          "",
+        ].join("\n"),
+      );
+      return result.failed === 0 ? 0 : 1;
+    }
+    if (command.name === "ingest-inbox") {
+      const result = ingestInbox(dataRoot);
+      const itemLines = result.items.map((item) => {
+        const details = [
+          item.recordId === undefined ? undefined : `record ${item.recordId}`,
+          item.message,
+        ].filter((value): value is string => value !== undefined);
+        return `${item.status.toUpperCase()}: ${item.path}${
+          details.length === 0 ? "" : ` — ${details.join("; ")}`
+        }`;
+      });
+      io.stdout(
+        [
+          "Inbox processing complete.",
+          ...itemLines,
+          `Processed: ${result.processed}`,
+          `Duplicates: ${result.duplicates}`,
+          `Skipped: ${result.skipped}`,
+          `Failed: ${result.failed}`,
+          "",
+        ].join("\n"),
+      );
+      return result.failed === 0 ? 0 : 1;
+    }
 
-    io.stderr(`Knowledge command not implemented yet: ${command.name}\n`);
+    io.stderr("Knowledge command not implemented yet.\n");
     return 2;
   } catch (error) {
     if (error instanceof DuplicateKnowledgeError) {

@@ -74,6 +74,21 @@ export interface SourceProvenance {
   originalName?: string;
   claimedMimeType?: string;
   detectedMediaType?: string;
+  detectedContainer?: string;
+  detectedCodec?: string;
+  byteLength: number;
+  checksum: string;
+}
+
+export type MediaSourceKind = "local-file" | "remote";
+
+export interface MediaDescriptor {
+  sourceKind: MediaSourceKind;
+  originalName?: string;
+  claimedMimeType?: string;
+  detectedMediaType: string;
+  detectedContainer: string;
+  detectedCodec: string;
   byteLength: number;
   checksum: string;
 }
@@ -99,4 +114,34 @@ export interface KnowledgeSearchResult {
   sourceReference: string;
   capturedAt: string;
   rank: number;
+}
+
+export interface RepositoryIndexResult {
+  indexed: number;
+  unchanged: number;
+  updated: number;
+  skipped: number;
+  missing: number;
+  failed: number;
+}
+
+export type InboxItemStatus =
+  | "processed"
+  | "duplicate"
+  | "skipped"
+  | "failed";
+
+export interface InboxItemResult {
+  path: string;
+  status: InboxItemStatus;
+  recordId?: string;
+  message?: string;
+}
+
+export interface InboxIngestResult {
+  processed: number;
+  duplicates: number;
+  skipped: number;
+  failed: number;
+  items: InboxItemResult[];
 }
