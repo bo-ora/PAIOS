@@ -236,16 +236,25 @@ export function collectRoadmap(
     });
   }
 
-  const active = phases.filter(
+  const executing = phases.filter(
     (phase) => phase.state === "in-progress" || phase.state === "blocked",
   );
-  if (active.length !== 1) {
+  if (executing.length > 1) {
     warnings.push(
-      `Malformed ${path}: expected exactly one active phase, found ${active.length}`,
+      `Malformed ${path}: expected exactly one active phase, found ${executing.length}`,
     );
     return empty;
   }
-  const currentPhase = active[0] ?? null;
+  const currentPhase =
+    executing[0] ??
+    phases.find(
+      (phase) => phase.state === "refining" || phase.state === "approved",
+    ) ??
+    null;
+  if (currentPhase === null) {
+    warnings.push(`Malformed ${path}: no current phase found`);
+    return empty;
+  }
   const currentIndex = phases.findIndex((phase) => phase === currentPhase);
   const nextPhase =
     phases.slice(currentIndex + 1).find((phase) => phase.state !== "deferred") ??

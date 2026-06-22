@@ -190,6 +190,40 @@ test("warns when roadmap data has multiple active phases", () => {
   );
 });
 
+test("selects the first unfinished phase during requirements refinement", () => {
+  const { root } = fixture();
+  writeFixtureFile(
+    root,
+    "docs/ROADMAP.md",
+    `# PAIOS Roadmap
+
+## Phase Table
+
+| Phase | State | User value |
+| --- | --- | --- |
+| **0 — Development Operating System** | \`completed\` | Develop consistently. |
+| **1 — Local Knowledge Loop** | \`refining\` | Capture knowledge locally. |
+| **2 — Telegram Daily Assistant** | \`proposed\` | Use PAIOS from Telegram. |
+`,
+  );
+
+  const status = collectStatus(root);
+
+  assert.deepEqual(status.roadmap.currentPhase, {
+    id: 1,
+    name: "Local Knowledge Loop",
+    state: "refining",
+    value: "Capture knowledge locally.",
+  });
+  assert.deepEqual(status.roadmap.nextPhase, {
+    id: 2,
+    name: "Telegram Daily Assistant",
+    state: "proposed",
+    value: "Use PAIOS from Telegram.",
+  });
+  assert.deepEqual(status.warnings, []);
+});
+
 test("warns for missing sections and malformed roadmap and debt rows", () => {
   const { root } = fixture();
   writeFixtureFile(
@@ -283,7 +317,12 @@ test("warns and ignores rows with empty required table cells", () => {
 
   const status = collectStatus(root);
 
-  assert.equal(status.roadmap.currentPhase, null);
+  assert.deepEqual(status.roadmap.currentPhase, {
+    id: 1,
+    name: "Second",
+    state: "refining",
+    value: "Second value.",
+  });
   assert.deepEqual(status.technicalDebt.unresolvedBySeverity, {
     critical: 0,
     high: 0,

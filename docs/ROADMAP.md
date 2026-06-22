@@ -10,19 +10,20 @@ visual projection of the phase table. If they disagree, the table wins.
 
 ## Current Position
 
-- Current phase: **Phase 0 — Development Operating System**
-- State: **in-progress**
-- Current value target: make PAIOS development repeatable, auditable, and easy
-  to resume.
-- Next candidate: **Phase 1 — Local Knowledge Loop**
-- Roadmap confidence: Phase 0 is approved; Phase 1 and Phase 2 have agreed
-  boundaries but still need formal requirements; later phases are provisional.
+- Current phase: **Phase 1 — Local Knowledge Loop**
+- State: **refining**
+- Current value target: capture personal knowledge locally and find it later
+  with source references.
+- Next candidate: **Phase 2 — Telegram Daily Assistant**
+- Roadmap confidence: Phase 0 is completed; Phase 1 and Phase 2 have agreed
+  value boundaries but still need formal requirements; later phases are
+  provisional.
 
 ## Visual Roadmap
 
 ```mermaid
 flowchart LR
-    P0["Phase 0<br/>Development Operating System<br/>IN PROGRESS"]
+    P0["Phase 0<br/>Development Operating System<br/>COMPLETED"]
     P1["Phase 1<br/>Local Knowledge Loop<br/>REFINING"]
     P2["Phase 2<br/>Telegram Daily Assistant<br/>PROPOSED"]
     P3["Phase 3<br/>Health Journal<br/>PROVISIONAL"]
@@ -38,7 +39,7 @@ flowchart LR
 
 | Phase | State | User value | Main deliverables | Depends on | Exit criteria |
 | --- | --- | --- | --- | --- | --- |
-| **0 — Development Operating System** | `in-progress` | PAIOS can be developed consistently and resumed after time away. | Codex operating model; requirements/ADR/plan/session/audit structure; RED–GREEN capability evaluations; repository validation; local raw-session capture; TypeScript `./paios status`; roadmap and debt tracking; one audited delivery cycle. | None | Status CLI passes typecheck, tests, build, human/JSON acceptance checks; roadmap appears in status; delivery session and process audit are committed. |
+| **0 — Development Operating System** | `completed` | PAIOS can be developed consistently and resumed after time away. | Codex operating model; requirements/ADR/plan/session/audit structure; RED–GREEN capability evaluations; repository validation; local raw-session capture; TypeScript `./paios status`; roadmap and debt tracking; one audited delivery cycle. | None | Status CLI passes lint, typecheck, tests, build, human/JSON acceptance checks; roadmap appears in status; CI, delivery session, process audit, and phase review are committed. |
 | **1 — Local Knowledge Loop** | `refining` | Capture personal knowledge locally and find it later with sources. | CLI and inbox capture; Markdown/text and repository-document ingestion; audio-file transcription; local durable storage; lexical/full-text search; sourced retrieval. | Phase 0 | A note, document, and audio recording can each be captured, stored, searched, and retrieved offline with source references. |
 | **2 — Telegram Daily Assistant** | `proposed` | Use PAIOS naturally during daily life from Telegram. | Telegram workspace model; text, voice, and document capture; transcription; knowledge search; source-backed answers; safe command/approval boundaries. | Phase 1 | Telegram can capture supported inputs and answer from the local knowledge base with traceable sources and no silent data loss. |
 | **3 — Health Journal** | `provisional` | Understand manually recorded health observations before relying on wearable APIs. | Symptoms, habits, workouts, sleep observations, manual measurements, CSV/JSON imports, sourced trend reports. | Phase 1; optionally Phase 2 | The user can record and import health data, review trends, and trace every conclusion to source records. |
@@ -69,7 +70,9 @@ flowchart LR
   criteria.
 - A phase cannot become `completed` without verification evidence and a
   roadmap/vision review.
-- Exactly one phase may be active (`in-progress` or `blocked`) at a time.
+- At most one phase may be executing (`in-progress` or `blocked`) at a time.
+- Between implementation phases, the first `refining` or `approved` phase is
+  the current phase.
 - New scope belongs in the smallest phase that can deliver it independently.
 - Technical shortcuts and deferred quality work must be recorded in
   `docs/TECH_DEBT.md`.

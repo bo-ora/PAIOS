@@ -52,10 +52,10 @@ its type-checked shared configurations.
 
 - [x] Update contributor and operational commands.
 - [x] Correct the stale Project Status CLI plan and session push blocker.
-- [ ] Mark TD-003 resolved after local workflow validation and successful GitHub
+- [x] Mark TD-003 resolved after local workflow validation and successful GitHub
       Actions execution.
-- [ ] Create a phase-boundary roadmap review.
-- [ ] Mark Phase 0 completed only when every exit criterion and CI run passes.
+- [x] Create a phase-boundary roadmap review.
+- [x] Mark Phase 0 completed only when every exit criterion and CI run passes.
 
 ### Task 5: Verify and deliver
 
@@ -64,5 +64,5 @@ its type-checked shared configurations.
 - [x] Run Python tests and repository validation.
 - [x] Run `git diff --check`.
 - [x] Review the full diff and resolve material findings.
-- [ ] Commit and push to `master`.
-- [ ] Confirm the GitHub Actions workflow succeeds.
+- [x] Commit and push the Phase 0 completion records to `master`.
+- [x] Confirm the GitHub Actions workflow succeeds.

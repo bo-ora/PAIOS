@@ -45,8 +45,10 @@ The command reads the current working tree, including uncommitted documents.
 - The suggested next action is the first item under the latest session’s
   `Follow-up` section.
 - Roadmap data comes from the authoritative phase table in `docs/ROADMAP.md`.
-  The current phase is the single row with state `in-progress` or `blocked`;
-  the next phase is the following non-deferred row. More than one active row is
+  The current phase is the single row with state `in-progress` or `blocked`.
+  Between implementation phases, when neither state exists, the current phase
+  is the first row with state `refining` or `approved`. The next phase is the
+  following non-deferred row. More than one `in-progress` or `blocked` row is
   malformed roadmap data.
 - The human report includes the repository-relative roadmap path
   `docs/ROADMAP.md` so supported terminals and clients can open it.

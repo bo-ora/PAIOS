@@ -12,10 +12,10 @@ agent orchestration, and additional personal workflows.
 
 ## Project Status
 
-PAIOS is currently in **Phase 0 — Development Operating System**. The immediate
-product is the TypeScript Project Status CLI, which makes project state,
-roadmap position, pending work, and technical debt easy to understand after
-time away.
+PAIOS has completed **Phase 0 — Development Operating System** and is refining
+requirements for **Phase 1 — Local Knowledge Loop**. The repository-local
+TypeScript Project Status CLI makes project state, roadmap position, pending
+work, and technical debt easy to understand after time away.
 
 - [Roadmap and current phase](docs/ROADMAP.md)
 - [Technical debt register](docs/TECH_DEBT.md)
