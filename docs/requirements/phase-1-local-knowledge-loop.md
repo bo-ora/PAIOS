@@ -1,6 +1,6 @@
 # Phase 1: Local Knowledge Loop
 
-Status: Proposed
+Status: Approved
 Date: 2026-06-22
 
 ## Purpose
@@ -260,10 +260,9 @@ reference, content checksum, ingestion status, and errors or warnings.
 - An independent review finds no unresolved critical or high privacy,
   data-loss, portability, or correctness issue.
 
-## Approval Decisions
+## Approved Decisions
 
-The following recommendations require explicit approval before Phase 1 changes
-to `approved` or implementation begins:
+Approved by the user on 2026-06-22:
 
 1. Use `./paios knowledge ...` as the Phase 1 command namespace.
 2. Guarantee Markdown and plain text for document import; defer PDF and office
@@ -277,5 +276,8 @@ to `approved` or implementation begins:
 7. Default runtime storage to ignored `.local/paios/knowledge/`, while allowing
    configuration for another local path.
 
-Storage engine and transcription-engine selection are architecture decisions to
-make after these product requirements are approved.
+Storage engine and transcription-engine selection remain architecture
+decisions. Within this approved product boundary, prefer inexpensive,
+reversible defaults and record them in ADRs without adding an approval pause.
+Require explicit approval when a choice materially affects privacy, data-loss
+risk, portability, recurring cost, or creates an expensive migration.
