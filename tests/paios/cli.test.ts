@@ -122,6 +122,7 @@ test("invalid usage exits two without collecting status", () => {
     captured.stderr.join(""),
     "Usage: ./paios status [--json]\n" +
       "Usage:\n" +
+      "  ./paios knowledge doctor\n" +
       "  ./paios knowledge add-note [--title TITLE] [--text TEXT] [--data-root PATH]\n" +
       "  ./paios knowledge show RECORD_ID [--data-root PATH]\n" +
       "  ./paios knowledge add-file PATH [--data-root PATH]\n" +

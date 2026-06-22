@@ -46,7 +46,17 @@ text, repository documents, inbox files, and local audio transcription.
   for WAV, MP3, M4A, and OGG/Opus contracts, durable original-audio storage,
   detected container/codec metadata, schema migration, and pending
   `knowledge add-audio` records completed.
-- Next: FFmpeg normalization and `whisper-cli` transcription adapters.
+- 2026-06-22: Explicit FFmpeg, `whisper-cli`, and local GGML model
+  configuration; PATH fallback for executables; bounded version checks; model
+  validation and checksum metadata; redacted `knowledge doctor` diagnostics;
+  and missing/invalid dependency tests completed.
+- 2026-06-22: Provider-neutral, timeout-bound FFmpeg normalization completed
+  behind a deterministic process seam. The adapter writes private temporary
+  input, requests canonical 16 kHz mono signed 16-bit PCM WAV, validates the
+  result, redacts diagnostics, supports the OGG/Opus contract, and removes
+  temporary state on every exit path.
+- Next: Timeout-bound `whisper-cli` transcription and durable processing-attempt
+  metadata.
 
 ## Delivery Sequence
 

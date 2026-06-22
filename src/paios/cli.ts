@@ -8,8 +8,10 @@ import {
   parseKnowledgeCommand,
   type KnowledgeCommand,
 } from "./knowledge/commands.js";
+import { collectAudioDiagnostics } from "./knowledge/audio-diagnostics.js";
 import {
   knowledgeDataRootEnvironment,
+  resolveAudioToolConfiguration,
   resolveKnowledgeDataRoot,
 } from "./knowledge/config.js";
 import { ingestInbox } from "./knowledge/inbox.js";
@@ -108,7 +110,7 @@ function formatSearchResults(results: KnowledgeSearchResult[]): string {
 }
 
 function dataRootFor(
-  command: KnowledgeCommand,
+  command: Exclude<KnowledgeCommand, { name: "doctor" }>,
   root: string,
   context: CliContext,
 ): string {
@@ -140,6 +142,22 @@ function runKnowledge(
 
   try {
     assertKnowledgeRuntime();
+    if (command.name === "doctor") {
+      const diagnostics = collectAudioDiagnostics(
+        resolveAudioToolConfiguration(root, context.environment),
+      );
+      io.stdout(
+        [
+          "PAIOS audio diagnostics",
+          `FFmpeg: ${diagnostics.ffmpeg.state} — ${diagnostics.ffmpeg.summary}`,
+          `whisper-cli: ${diagnostics.whisperCli.state} — ${diagnostics.whisperCli.summary}`,
+          `Whisper model: ${diagnostics.whisperModel.state} — ${diagnostics.whisperModel.summary}`,
+          `Audio processing: ${diagnostics.ready ? "ready" : "not ready"}`,
+          "",
+        ].join("\n"),
+      );
+      return diagnostics.ready ? 0 : 1;
+    }
     const dataRoot = dataRootFor(command, root, context);
     if (command.name === "add-note") {
       const content = command.text ?? context.stdin();

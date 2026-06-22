@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -16,12 +17,21 @@ import { afterEach, test } from "node:test";
 
 import { runCli, type CliContext, type CliIo } from "../../src/paios/cli.js";
 import {
+  AudioNormalizationError,
+  type AudioProcessRunner,
+  withNormalizedAudio,
+} from "../../src/paios/knowledge/audio-normalizer.js";
+import {
   parseKnowledgeCommand,
   type KnowledgeCommand,
 } from "../../src/paios/knowledge/commands.js";
 import {
+  ffmpegPathEnvironment,
   knowledgeDataRootEnvironment,
+  resolveAudioToolConfiguration,
   resolveKnowledgeDataRoot,
+  whisperCliPathEnvironment,
+  whisperModelPathEnvironment,
 } from "../../src/paios/knowledge/config.js";
 import { ingestInbox } from "../../src/paios/knowledge/inbox.js";
 import {
@@ -44,6 +54,10 @@ function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "paios-knowledge-test-"));
   temporaryRoots.push(root);
   return root;
+}
+
+function readdirNames(path: string): string[] {
+  return readdirSync(path).sort();
 }
 
 afterEach(() => {
@@ -72,6 +86,7 @@ function capture(): {
 
 test("knowledge command parser covers the approved command namespace", () => {
   const cases: [string[], KnowledgeCommand][] = [
+    [["doctor"], { name: "doctor" }],
     [
       ["add-note", "--title", "Title", "--text", "Body"],
       { name: "add-note", title: "Title", text: "Body" },
@@ -93,8 +108,139 @@ test("knowledge command parser covers the approved command namespace", () => {
     { name: "show", recordId: "record-1", dataRoot: "custom" },
   );
   assert.equal(parseKnowledgeCommand(["add-note", "--title"]), null);
+  assert.equal(parseKnowledgeCommand(["doctor", "--data-root", "custom"]), null);
   assert.equal(parseKnowledgeCommand(["search"]), null);
   assert.equal(parseKnowledgeCommand(["unknown"]), null);
+});
+
+test("audio tool configuration resolves explicit paths and PATH fallbacks", () => {
+  const root = temporaryRoot();
+  assert.deepEqual(resolveAudioToolConfiguration(root, {}), {
+    ffmpeg: { command: "ffmpeg", source: "path" },
+    whisperCli: { command: "whisper-cli", source: "path" },
+    whisperModelPath: null,
+  });
+  assert.deepEqual(
+    resolveAudioToolConfiguration(root, {
+      [ffmpegPathEnvironment]: "tools/ffmpeg",
+      [whisperCliPathEnvironment]: "/opt/whisper-cli",
+      [whisperModelPathEnvironment]: "models/ggml-base.bin",
+    }),
+    {
+      ffmpeg: { command: join(root, "tools", "ffmpeg"), source: "configured" },
+      whisperCli: {
+        command: "/opt/whisper-cli",
+        source: "configured",
+      },
+      whisperModelPath: join(root, "models", "ggml-base.bin"),
+    },
+  );
+});
+
+test("audio diagnostics validate configured executables and model without exposing paths", () => {
+  const root = temporaryRoot();
+  const tools = join(root, "private-tools");
+  const models = join(root, "private-models");
+  mkdirSync(tools);
+  mkdirSync(models);
+  const ffmpeg = join(tools, "ffmpeg");
+  const whisperCli = join(tools, "whisper-cli");
+  const model = join(models, "ggml-base.bin");
+  writeFileSync(
+    ffmpeg,
+    "#!/bin/sh\nprintf '%s version test-build\\n' \"$0\"\n",
+  );
+  writeFileSync(
+    whisperCli,
+    "#!/bin/sh\nprintf '%s whisper.cpp test-build\\n' \"$0\"\n",
+  );
+  chmodSync(ffmpeg, 0o755);
+  chmodSync(whisperCli, 0o755);
+  writeFileSync(model, "local model fixture");
+  const captured = capture();
+
+  assert.equal(
+    runCli(["knowledge", "doctor"], root, captured.io, {
+      environment: {
+        [ffmpegPathEnvironment]: ffmpeg,
+        [whisperCliPathEnvironment]: whisperCli,
+        [whisperModelPathEnvironment]: model,
+      },
+      stdin: () => "",
+    }),
+    0,
+  );
+  const output = captured.stdout.join("");
+  assert.match(output, /FFmpeg: ready — ffmpeg version test-build/);
+  assert.match(
+    output,
+    /whisper-cli: ready — whisper-cli whisper\.cpp test-build/,
+  );
+  assert.match(
+    output,
+    /Whisper model: ready — ggml-base\.bin \(19 bytes, sha256 [0-9a-f]{64}\)/,
+  );
+  assert.match(output, /Audio processing: ready/);
+  assert.doesNotMatch(output, new RegExp(root));
+  assert.deepEqual(captured.stderr, []);
+});
+
+test("audio diagnostics report every missing dependency with actionable configuration", () => {
+  const root = temporaryRoot();
+  const captured = capture();
+
+  assert.equal(
+    runCli(["knowledge", "doctor"], root, captured.io, {
+      environment: {
+        PATH: "",
+        [ffmpegPathEnvironment]: join(root, "missing-ffmpeg"),
+        [whisperCliPathEnvironment]: join(root, "missing-whisper-cli"),
+      },
+      stdin: () => "",
+    }),
+    1,
+  );
+  const output = captured.stdout.join("");
+  assert.match(output, /FFmpeg: missing .*PAIOS_FFMPEG_PATH/);
+  assert.match(output, /whisper-cli: missing .*PAIOS_WHISPER_CLI_PATH/);
+  assert.match(output, /Whisper model: missing .*PAIOS_WHISPER_MODEL_PATH/);
+  assert.match(output, /Audio processing: not ready/);
+  assert.doesNotMatch(output, new RegExp(root));
+  assert.deepEqual(captured.stderr, []);
+});
+
+test("audio diagnostics reject broken executables and invalid model files", () => {
+  const root = temporaryRoot();
+  const brokenExecutable = join(root, "broken-tool");
+  const modelDirectory = join(root, "model-directory");
+  writeFileSync(brokenExecutable, "#!/bin/sh\nexit 7\n");
+  chmodSync(brokenExecutable, 0o755);
+  mkdirSync(modelDirectory);
+  const captured = capture();
+
+  assert.equal(
+    runCli(["knowledge", "doctor"], root, captured.io, {
+      environment: {
+        [ffmpegPathEnvironment]: brokenExecutable,
+        [whisperCliPathEnvironment]: brokenExecutable,
+        [whisperModelPathEnvironment]: modelDirectory,
+      },
+      stdin: () => "",
+    }),
+    1,
+  );
+  const output = captured.stdout.join("");
+  assert.match(output, /FFmpeg: error — FFmpeg exited with status 7/);
+  assert.match(
+    output,
+    /whisper-cli: error — whisper-cli exited with status 7/,
+  );
+  assert.match(
+    output,
+    /Whisper model: error — The configured model is not a readable, non-empty regular file/,
+  );
+  assert.doesNotMatch(output, new RegExp(root));
+  assert.deepEqual(captured.stderr, []);
 });
 
 test("data root precedence is command, environment, then local default", () => {
@@ -354,6 +500,262 @@ function wavFixture(): Buffer {
   bytes.writeUInt32LE(0, 40);
   return bytes;
 }
+
+function canonicalWavFixture(): Buffer {
+  const bytes = wavFixture();
+  bytes.writeUInt32LE(16_000, 24);
+  bytes.writeUInt32LE(32_000, 28);
+  bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt16LE(16, 34);
+  return bytes;
+}
+
+function normalizationInput(): {
+  bytes: Buffer;
+  descriptor: ReturnType<typeof describeAudioMedia>;
+} {
+  const bytes = wavFixture();
+  return {
+    bytes,
+    descriptor: describeAudioMedia(bytes, {
+      sourceKind: "local-file",
+      originalName: "voice.wav",
+      claimedMimeType: "audio/wav",
+    }),
+  };
+}
+
+test("FFmpeg normalizer uses canonical arguments and cleans temporary files", () => {
+  const root = temporaryRoot();
+  const temporary = join(root, "temporary");
+  const input = normalizationInput();
+  let observedInputPath = "";
+  let observedOutputPath = "";
+  const runner: AudioProcessRunner = (command, args, timeoutMs) => {
+    assert.equal(command, "/configured/ffmpeg");
+    assert.equal(timeoutMs, 1_234);
+    assert.deepEqual(args.slice(0, 5), [
+      "-nostdin",
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+    ]);
+    assert.deepEqual(args.slice(7, 17), [
+      "-vn",
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      "-c:a",
+      "pcm_s16le",
+      "-f",
+      "wav",
+      args[16],
+    ]);
+    observedInputPath = args[6] ?? "";
+    observedOutputPath = args[16] ?? "";
+    assert.deepEqual(readFileSync(observedInputPath), input.bytes);
+    writeFileSync(observedOutputPath, canonicalWavFixture());
+    return { status: 0, stderr: "" };
+  };
+
+  const byteLength = withNormalizedAudio(
+    input,
+    {
+      ffmpegCommand: "/configured/ffmpeg",
+      temporaryRoot: temporary,
+      timeoutMs: 1_234,
+      runProcess: runner,
+    },
+    (normalizedPath) => {
+      assert.equal(normalizedPath, observedOutputPath);
+      assert.ok(existsSync(normalizedPath));
+      return readFileSync(normalizedPath).byteLength;
+    },
+  );
+
+  assert.equal(byteLength, canonicalWavFixture().byteLength);
+  assert.ok(!existsSync(observedInputPath));
+  assert.ok(!existsSync(observedOutputPath));
+  assert.deepEqual(readdirNames(temporary), []);
+});
+
+test("FFmpeg normalizer classifies process failures and redacts temporary paths", () => {
+  const cases: {
+    name: string;
+    result: ReturnType<AudioProcessRunner>;
+    failure: AudioNormalizationError["failure"];
+    message: RegExp;
+  }[] = [
+    {
+      name: "missing executable",
+      result: {
+        status: null,
+        error: Object.assign(new Error("missing"), { code: "ENOENT" }),
+        stderr: "",
+      },
+      failure: "missing-executable",
+      message: /PAIOS_FFMPEG_PATH/,
+    },
+    {
+      name: "timeout",
+      result: {
+        status: null,
+        error: Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }),
+        stderr: "",
+      },
+      failure: "timeout",
+      message: /1234 ms/,
+    },
+    {
+      name: "nonzero exit",
+      result: {
+        status: 7,
+        stderr: "failure at PLACEHOLDER/private.wav",
+      },
+      failure: "process-failed",
+      message: /status 7/,
+    },
+  ];
+
+  for (const item of cases) {
+    const root = temporaryRoot();
+    const temporary = join(root, "temporary");
+    const runner: AudioProcessRunner = (_command, args) => ({
+      ...item.result,
+      stderr: item.result.stderr.replace(
+        "PLACEHOLDER",
+        join(args[6] ?? "", ".."),
+      ),
+    });
+    assert.throws(
+      () =>
+        withNormalizedAudio(
+          normalizationInput(),
+          {
+            ffmpegCommand: join(root, "private", "ffmpeg"),
+            temporaryRoot: temporary,
+            timeoutMs: 1_234,
+            runProcess: runner,
+          },
+          () => undefined,
+        ),
+      (error: unknown) =>
+        error instanceof AudioNormalizationError &&
+        error.failure === item.failure &&
+        item.message.test(error.message) &&
+        !error.message.includes(root),
+      item.name,
+    );
+    assert.deepEqual(readdirNames(temporary), []);
+  }
+});
+
+test("FFmpeg normalizer rejects descriptor mismatch and malformed output", () => {
+  const root = temporaryRoot();
+  const temporary = join(root, "temporary");
+  const input = normalizationInput();
+  const mismatched = {
+    ...input,
+    descriptor: { ...input.descriptor, checksum: "0".repeat(64) },
+  };
+  assert.throws(
+    () =>
+      withNormalizedAudio(
+        mismatched,
+        {
+          ffmpegCommand: "ffmpeg",
+          temporaryRoot: temporary,
+          runProcess: () => {
+            throw new Error("process must not run");
+          },
+        },
+        () => undefined,
+      ),
+    (error: unknown) =>
+      error instanceof AudioNormalizationError &&
+      error.failure === "invalid-source",
+  );
+
+  assert.throws(
+    () =>
+      withNormalizedAudio(
+        input,
+        {
+          ffmpegCommand: "ffmpeg",
+          temporaryRoot: temporary,
+          runProcess: (_command, args) => {
+            writeFileSync(args[16] ?? "", "not canonical audio");
+            return { status: 0, stderr: "" };
+          },
+        },
+        () => undefined,
+      ),
+    (error: unknown) =>
+      error instanceof AudioNormalizationError &&
+      error.failure === "invalid-output",
+  );
+  assert.deepEqual(readdirNames(temporary), []);
+});
+
+test("FFmpeg normalizer cleans temporary files when the consumer fails", () => {
+  const root = temporaryRoot();
+  const temporary = join(root, "temporary");
+  assert.throws(
+    () =>
+      withNormalizedAudio(
+        normalizationInput(),
+        {
+          ffmpegCommand: "ffmpeg",
+          temporaryRoot: temporary,
+          runProcess: (_command, args) => {
+            writeFileSync(args[16] ?? "", canonicalWavFixture());
+            return { status: 0, stderr: "" };
+          },
+        },
+        () => {
+          throw new Error("consumer failed");
+        },
+      ),
+    /consumer failed/,
+  );
+  assert.deepEqual(readdirNames(temporary), []);
+});
+
+test("FFmpeg normalizer accepts the Telegram-compatible OGG Opus contract", () => {
+  const root = temporaryRoot();
+  const temporary = join(root, "temporary");
+  const bytes = Buffer.alloc(64);
+  bytes.write("OggS", 0);
+  bytes.write("OpusHead", 28);
+  const descriptor = describeAudioMedia(bytes, {
+    sourceKind: "remote",
+    originalName: "voice.ogg",
+    claimedMimeType: "audio/ogg",
+  });
+  let observedInput = "";
+
+  withNormalizedAudio(
+    { bytes, descriptor },
+    {
+      ffmpegCommand: "ffmpeg",
+      temporaryRoot: temporary,
+      runProcess: (_command, args) => {
+        observedInput = args[6] ?? "";
+        writeFileSync(args[16] ?? "", canonicalWavFixture());
+        return { status: 0, stderr: "" };
+      },
+    },
+    (normalizedPath) => {
+      assert.match(observedInput, /original\.ogg$/);
+      assert.ok(existsSync(normalizedPath));
+    },
+  );
+
+  assert.ok(!existsSync(observedInput));
+  assert.deepEqual(readdirNames(temporary), []);
+});
 
 test("audio import preserves original bytes and provider-neutral media metadata", () => {
   const root = temporaryRoot();

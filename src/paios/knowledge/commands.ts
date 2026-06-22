@@ -1,4 +1,5 @@
 export type KnowledgeCommand =
+  | { name: "doctor" }
   | {
       name: "add-note";
       title?: string;
@@ -15,6 +16,7 @@ export type KnowledgeCommand =
 
 export const knowledgeUsage =
   "Usage:\n" +
+  "  ./paios knowledge doctor\n" +
   "  ./paios knowledge add-note [--title TITLE] [--text TEXT] [--data-root PATH]\n" +
   "  ./paios knowledge show RECORD_ID [--data-root PATH]\n" +
   "  ./paios knowledge add-file PATH [--data-root PATH]\n" +
@@ -58,6 +60,9 @@ function withDataRoot(
 
 export function parseKnowledgeCommand(args: string[]): KnowledgeCommand | null {
   const name = args[0];
+  if (name === "doctor") {
+    return args.length === 1 ? { name } : null;
+  }
   const configured = withDataRoot(args.slice(1));
   if (name === undefined || configured === null) {
     return null;

@@ -77,7 +77,11 @@ from transactional SQLite metadata and rebuildable FTS5 search state.
 Markdown/text import, repository indexing, deterministic inbox processing,
 search, and rebuild are implemented. `knowledge add-audio` now preserves
 content-validated audio and provider-neutral media metadata in a pending record;
-local normalization and transcription remain the next slice.
+`knowledge doctor` validates explicitly configured FFmpeg, `whisper-cli`, and
+local model dependencies without exposing their absolute paths. The
+provider-neutral FFmpeg adapter now normalizes supported bytes to temporary
+16 kHz mono PCM WAV with timeout and cleanup guarantees. Transcription and
+end-to-end audio processing remain pending.
 
 See [HOW_TO_USE.md](HOW_TO_USE.md) for short, verified scenarios and expected
 behavior.

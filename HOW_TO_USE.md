@@ -157,6 +157,35 @@ container and codec metadata. Local FFmpeg normalization and Whisper
 transcription are not implemented yet, so the record remains `pending` and is
 not searchable.
 
+## Configure and Diagnose Local Audio Tools
+
+PAIOS resolves FFmpeg and `whisper-cli` from `PATH` by default. Override either
+executable and select the required local GGML model with environment variables:
+
+```bash
+export PAIOS_FFMPEG_PATH="/opt/homebrew/bin/ffmpeg"
+export PAIOS_WHISPER_CLI_PATH="$HOME/src/whisper.cpp/build/bin/whisper-cli"
+export PAIOS_WHISPER_MODEL_PATH="$HOME/.local/share/whisper/ggml-base.bin"
+./paios knowledge doctor
+```
+
+Relative configured paths resolve from the repository root. The diagnostic
+checks that both executables start within five seconds, reports their bounded
+version output, validates that the model is a readable non-empty regular file,
+and reports its filename, byte length, and SHA-256 checksum. It never downloads
+dependencies or prints configured absolute paths.
+
+The command exits zero only when all three dependencies are ready. Missing or
+invalid dependencies are all reported in one run with the relevant
+configuration variable.
+
+The internal FFmpeg adapter is implemented and verified with deterministic
+process fixtures. It accepts original bytes plus the detected media descriptor,
+normalizes to temporary 16 kHz mono signed 16-bit PCM WAV, validates the output,
+and removes temporary input and output files after success or failure. It is
+not yet connected to `add-audio`; that command remains pending until local
+transcription and durable attempt recording are implemented together.
+
 ## Rebuild the Search Index
 
 Recreate the derived FTS5 index from durable SQLite records:
@@ -207,5 +236,6 @@ git diff --check
 
 ## Not Implemented Yet
 
-Audio normalization, local Whisper transcription, and searchable transcript
-storage remain to be implemented.
+Connecting normalization to audio records, local Whisper transcription,
+durable attempt metadata, and searchable transcript storage remain to be
+implemented.

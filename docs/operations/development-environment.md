@@ -62,12 +62,27 @@ Phase-specific tools become required only when their implementation slice
 starts. Record exact installation, versions, licensing, disk, and memory
 implications before promoting them to current requirements.
 
+Diagnose the Phase 1 audio toolchain without changing the machine:
+
+```bash
+./paios knowledge doctor
+```
+
+The executable defaults are `ffmpeg` and `whisper-cli` on `PATH`. Configure
+explicit paths with `PAIOS_FFMPEG_PATH` and `PAIOS_WHISPER_CLI_PATH`. Configure
+the required local GGML model with `PAIOS_WHISPER_MODEL_PATH`; no model is
+selected or downloaded implicitly. Relative configured paths resolve from the
+repository root. Diagnostics report versions and model checksum metadata while
+redacting configured absolute paths.
+
 ## Configuration That Must Remain Local
 
 - Git user name and email.
 - Codex authentication and configuration.
 - Docker Desktop preferences and credentials.
 - Whisper models.
+- Local `PAIOS_FFMPEG_PATH`, `PAIOS_WHISPER_CLI_PATH`, and
+  `PAIOS_WHISPER_MODEL_PATH` values when machine-specific paths are needed.
 - Secrets and populated `.env` files.
 - Personal knowledge content under `.local/` or another configured data root.
 
