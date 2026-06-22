@@ -44,6 +44,9 @@ Evidence:
 ### 2. Durable Record and Storage Core
 
 - Define explicit public record, source, processing-attempt, and error types.
+- Model source provenance without provider-specific core fields: source adapter,
+  external reference metadata, original name, claimed MIME type, detected media
+  type, byte length, and checksum.
 - Create versioned SQLite migrations using STRICT tables and foreign keys.
 - Implement atomic file copy/write using temporary files, fsync where
   available, and rename before reporting success.
@@ -99,6 +102,8 @@ Evidence:
 
 - Add FFmpeg and `whisper-cli` subprocess adapters with explicit timeouts.
 - Add executable/model diagnostics and configuration.
+- Add a provider-neutral media descriptor and content/container probing;
+  extensions and claimed MIME types are hints, not authority.
 - Preserve original audio, normalize to temporary WAV, transcribe locally, and
   store transcript and implementation metadata.
 - Make transcript indexing use the same FTS path as text records.
@@ -107,6 +112,10 @@ Evidence:
 
 - Deterministic fake-process tests for every failure boundary.
 - Opt-in real integration test for WAV, MP3, and M4A.
+- Contract fixture for Telegram-compatible OGG/Opus, misleading extensions, and
+  MIME/container disagreement.
+- Simulated remote-source adapter test proving Telegram-style provenance enters
+  the pipeline without Telegram dependencies in core modules.
 - Fixed-sample benchmark for `tiny`, `base`, and `small`; document results.
 
 ### 7. Backup, Restore, and Operational Documentation
@@ -160,6 +169,11 @@ Pause for approval if implementation would:
 - weaken backup/rebuild guarantees;
 - add a substantial always-running service or database server;
 - materially change supported formats or user workflows.
+
+Adding OGG/Opus to the future Telegram adapter is already inside the approved
+boundary when it uses the shared descriptor, normalizer, durable-source, and
+transcription contracts. It does not require a storage migration or a new
+transcription architecture.
 
 ## Done Criteria
 

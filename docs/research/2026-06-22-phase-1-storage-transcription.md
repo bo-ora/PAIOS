@@ -88,6 +88,35 @@ and search requirements.
 
 ## Transcription Comparison
 
+### Telegram Compatibility
+
+Telegram's Bot API represents voice notes, audio, and documents as distinct
+message fields. Received voice and audio objects provide a downloadable
+`file_id`, a stable `file_unique_id`, optional MIME type, file size, and, for
+audio, an optional original filename. Telegram's sending contract supports
+voice messages as OGG encoded with Opus, MP3, or M4A; music-player audio is MP3
+or M4A.
+
+Phase 1 should not couple transcription to filename extensions or CLI-local
+files. The normalizer input must be original bytes plus a media descriptor:
+
+- source adapter and source kind;
+- provider-neutral external reference;
+- original filename when available;
+- claimed MIME type;
+- detected container and codec;
+- byte length and checksum.
+
+The source adapter is responsible only for acquiring bytes and provenance. The
+shared media normalizer validates/detects the content and converts it to the
+canonical temporary WAV consumed by the transcription adapter. This lets a
+future Telegram adapter add OGG/Opus to its allowlist without changing durable
+record identity, search, transcript storage, or the transcription engine.
+
+Telegram `file_id` is renewable and provider-specific, so it must not be the
+sole durable source reference. Preserve the downloaded original bytes and store
+the Telegram chat/message identity and `file_unique_id` as provenance metadata.
+
 ### `whisper.cpp` CLI plus FFmpeg
 
 Advantages:
@@ -159,6 +188,8 @@ Costs:
    binaries or models during normal capture.
 7. Keep storage, search, audio normalization, and transcription behind separate
    interfaces.
+8. Make media handling descriptor-based and content-validated, with OGG/Opus as
+   a forward-compatibility fixture for the future Telegram adapter.
 
 ## Sources
 
@@ -173,3 +204,6 @@ Costs:
 - [Homebrew FFmpeg](https://formulae.brew.sh/formula/ffmpeg)
 - [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper)
 - [OpenAI Whisper](https://github.com/openai/whisper)
+- [Telegram Bot API](https://core.telegram.org/bots/api)
+- [Telegram TDLib voice-note input](https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1input_message_voice_note.html)
+- [Telegram TDLib voice-note metadata](https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1voice_note.html)

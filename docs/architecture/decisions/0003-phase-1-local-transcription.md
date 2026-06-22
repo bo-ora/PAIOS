@@ -14,12 +14,24 @@ The original audio is durable source material. Audio conversion and model
 output are processing steps that must be retryable without creating duplicate
 records.
 
+Phase 2 will receive Telegram voice notes and uploaded audio. Telegram currently
+supports voice-message OGG/Opus, MP3, and M4A, while received media metadata may
+include MIME type and filename. The core pipeline must not assume that an audio
+source is a local CLI path or that its extension is authoritative.
+
 ## Decision
 
 - Invoke FFmpeg and `whisper-cli` as local subprocesses through separate
   adapter interfaces.
 - Normalize every supported input to a temporary 16 kHz mono signed 16-bit PCM
   WAV before transcription.
+- Define the normalizer boundary as original bytes plus a provider-neutral media
+  descriptor, not a filename extension. The descriptor includes source kind,
+  original filename, claimed MIME type, detected container/codec, byte length,
+  and checksum.
+- Validate media using detected content/container information. Treat filenames
+  and provider MIME types as hints, and reject disagreement that cannot be
+  decoded safely.
 - Preserve the original imported audio unchanged in managed storage.
 - Require explicit installation of FFmpeg, `whisper.cpp`, and a local model.
 - Never download a binary or model during capture or transcription.
@@ -33,6 +45,14 @@ records.
   or unrelated absolute paths.
 - Keep failed source records and temporary-processing state recoverable; remove
   temporary normalized audio after a completed or recorded failed attempt.
+- Keep provider acquisition outside the normalizer and transcription adapters.
+  A future Telegram adapter will download bytes, attach Telegram provenance,
+  and pass the same media descriptor into the shared pipeline.
+- Store provider-specific identifiers only as provenance. Never use a Telegram
+  `file_id` as the sole durable identity; retain original bytes, checksum,
+  message identity, and `file_unique_id` when available.
+- Include OGG/Opus in adapter contract tests now, while keeping Phase 1's
+  user-facing guaranteed import formats limited to WAV, MP3, and M4A.
 
 ## Alternatives Considered
 
@@ -61,6 +81,11 @@ records.
   non-zero exit, malformed output, and missing executable/model cases.
 - Run an opt-in local integration test against real FFmpeg and `whisper-cli`.
 - Verify WAV, MP3, and M4A normalization and transcript-source linkage.
+- Verify OGG/Opus through the normalizer contract fixture and prove it produces
+  the same canonical WAV/transcription input without schema changes.
+- Verify misleading extensions and MIME types do not bypass content validation.
+- Verify a simulated Telegram source can attach provenance without introducing
+  Telegram types into storage, search, or transcription interfaces.
 - Verify no network is required after explicit dependency/model installation.
 - Benchmark `tiny`, `base`, and `small` on a fixed sample before changing the
   documented default.
