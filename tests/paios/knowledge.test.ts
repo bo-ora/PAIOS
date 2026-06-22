@@ -26,6 +26,7 @@ import {
   type TranscriptionProcessRunner,
   transcribeNormalizedAudio,
 } from "../../src/paios/knowledge/audio-transcriber.js";
+import { processAudioRecord } from "../../src/paios/knowledge/audio-processing.js";
 import {
   parseKnowledgeCommand,
   type KnowledgeCommand,
@@ -1024,6 +1025,154 @@ test("processing attempts reject invalid metadata and non-audio records", () => 
       }),
     /Invalid processing-attempt metadata/,
   );
+});
+
+test("audio processing commits transcript, ready state, FTS, and attempt atomically", () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const audioPath = join(root, "voice.wav");
+  const modelPath = join(root, "ggml-base.bin");
+  writeFileSync(audioPath, wavFixture());
+  writeFileSync(modelPath, "model fixture");
+  const record = addAudio(dataRoot, audioPath);
+  const times = [
+    new Date("2026-06-22T20:00:00.000Z"),
+    new Date("2026-06-22T20:00:03.000Z"),
+  ];
+
+  const result = processAudioRecord(dataRoot, record.id, {
+    normalizer: {
+      ffmpegCommand: "ffmpeg",
+      temporaryRoot: join(root, "normalize"),
+      runProcess: (_command, args) => {
+        writeFileSync(args[16] ?? "", canonicalWavFixture());
+        return { status: 0, stderr: "" };
+      },
+    },
+    transcriber: {
+      whisperCommand: "whisper-cli",
+      whisperVersion: "whisper.cpp test",
+      modelPath,
+      temporaryRoot: join(root, "transcribe"),
+      language: "uk",
+      runProcess: (_command, args) => {
+        writeFileSync(`${args[8]}.txt`, "Пошуковий аудіо запис");
+        return { status: 0, stderr: "" };
+      },
+    },
+    now: () => times.shift() ?? new Date("2026-06-22T20:00:03.000Z"),
+  });
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.record.id, record.id);
+  assert.equal(result.record.state, "ready");
+  assert.equal(result.record.normalizedText, "Пошуковий аудіо запис");
+  assert.equal(result.record.error, null);
+  assert.equal(result.attempt?.status, "succeeded");
+  assert.equal(result.attempt?.startedAt, "2026-06-22T20:00:00.000Z");
+  assert.equal(result.attempt?.completedAt, "2026-06-22T20:00:03.000Z");
+  assert.equal(searchRecords(dataRoot, "Пошуковий")[0]?.recordId, record.id);
+  assert.deepEqual(listProcessingAttempts(dataRoot, record.id), [
+    result.attempt,
+  ]);
+  assert.deepEqual(
+    readFileSync(join(dataRoot, record.sourceReference)),
+    wavFixture(),
+  );
+});
+
+test("failed audio processing is recoverable under the same record identity", () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const audioPath = join(root, "voice.wav");
+  const modelPath = join(root, "ggml-base.bin");
+  writeFileSync(audioPath, wavFixture());
+  writeFileSync(modelPath, "model fixture");
+  const record = addAudio(dataRoot, audioPath);
+  const normalizer = {
+    ffmpegCommand: "ffmpeg",
+    temporaryRoot: join(root, "normalize"),
+    runProcess: (_command: string, args: string[]) => {
+      writeFileSync(args[16] ?? "", canonicalWavFixture());
+      return { status: 0, stderr: "" };
+    },
+  };
+  const transcriber = {
+    whisperCommand: "whisper-cli",
+    whisperVersion: "whisper.cpp test",
+    modelPath,
+    temporaryRoot: join(root, "transcribe"),
+    runProcess: () => ({ status: 7, stderr: "fixture failure" }),
+  };
+
+  const failed = processAudioRecord(dataRoot, record.id, {
+    normalizer,
+    transcriber,
+  });
+
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.record.id, record.id);
+  assert.equal(failed.record.state, "failed");
+  assert.match(failed.record.error ?? "", /status 7/);
+  assert.equal(failed.attempt?.status, "failed");
+  assert.equal(failed.attempt?.exitStatus, 7);
+  assert.deepEqual(searchRecords(dataRoot, "recovered"), []);
+
+  const recovered = processAudioRecord(dataRoot, record.id, {
+    normalizer,
+    transcriber: {
+      ...transcriber,
+      runProcess: (_command, args) => {
+        writeFileSync(`${args[8]}.txt`, "recovered transcript");
+        return { status: 0, stderr: "" };
+      },
+    },
+  });
+
+  assert.equal(recovered.status, "succeeded");
+  assert.equal(recovered.record.id, record.id);
+  assert.equal(recovered.record.state, "ready");
+  assert.equal(searchRecords(dataRoot, "recovered")[0]?.recordId, record.id);
+  assert.deepEqual(
+    listProcessingAttempts(dataRoot, record.id).map((attempt) => attempt.status),
+    ["failed", "succeeded"],
+  );
+
+  const repeated = processAudioRecord(dataRoot, record.id, {
+    normalizer,
+    transcriber,
+  });
+  assert.equal(repeated.status, "already-ready");
+  assert.equal(listProcessingAttempts(dataRoot, record.id).length, 2);
+});
+
+test("audio processing records a bounded source failure without exposing the data root", () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const audioPath = join(root, "voice.wav");
+  const modelPath = join(root, "ggml-base.bin");
+  writeFileSync(audioPath, wavFixture());
+  writeFileSync(modelPath, "model fixture");
+  const record = addAudio(dataRoot, audioPath);
+  rmSync(join(dataRoot, record.sourceReference));
+
+  const result = processAudioRecord(dataRoot, record.id, {
+    normalizer: {
+      ffmpegCommand: "ffmpeg",
+      temporaryRoot: join(root, "normalize"),
+    },
+    transcriber: {
+      whisperCommand: "whisper-cli",
+      whisperVersion: "whisper.cpp test",
+      modelPath,
+      temporaryRoot: join(root, "transcribe"),
+    },
+  });
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.record.state, "failed");
+  assert.equal(result.record.error, "Managed audio source could not be read.");
+  assert.doesNotMatch(result.attempt?.diagnostic ?? "", new RegExp(root));
 });
 
 test("audio detection supports MP3, M4A, and Telegram-compatible OGG Opus", () => {

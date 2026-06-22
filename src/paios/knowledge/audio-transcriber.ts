@@ -63,6 +63,11 @@ export interface AudioTranscriptionResult {
   exitStatus: 0;
 }
 
+export interface WhisperModelMetadata {
+  modelFilename: string;
+  modelChecksum: string;
+}
+
 const defaultTimeoutMs = 600_000;
 const maximumDiagnosticLength = 500;
 const checksumBufferSize = 1024 * 1024;
@@ -128,6 +133,13 @@ function checksumFile(path: string): string {
   } finally {
     closeSync(descriptor);
   }
+}
+
+export function inspectWhisperModel(path: string): WhisperModelMetadata {
+  return {
+    modelFilename: basename(path),
+    modelChecksum: checksumFile(path),
+  };
 }
 
 function boundedDiagnostic(
@@ -199,7 +211,9 @@ export function transcribeNormalizedAudio(
   options: AudioTranscriberOptions,
 ): AudioTranscriptionResult {
   const { timeoutMs, language } = validateOptions(normalizedPath, options);
-  const modelChecksum = checksumFile(options.modelPath);
+  const { modelFilename, modelChecksum } = inspectWhisperModel(
+    options.modelPath,
+  );
   mkdirSync(options.temporaryRoot, { recursive: true, mode: 0o700 });
   const temporaryDirectory = mkdtempSync(
     join(options.temporaryRoot, "paios-transcript-"),
@@ -288,7 +302,7 @@ export function transcribeNormalizedAudio(
       transcript,
       implementation: "whisper-cli",
       implementationVersion: options.whisperVersion.trim(),
-      modelFilename: basename(options.modelPath),
+      modelFilename,
       modelChecksum,
       language,
       exitStatus: 0,

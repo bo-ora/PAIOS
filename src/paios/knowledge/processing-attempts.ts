@@ -40,6 +40,21 @@ export interface RecordProcessingAttemptInput {
   diagnostic: string | null;
 }
 
+export type CompleteAudioProcessingInput = RecordProcessingAttemptInput &
+  (
+    | {
+        status: "succeeded";
+        exitStatus: 0;
+        diagnostic: null;
+        transcript: string;
+      }
+    | {
+        status: "failed";
+        transcript: null;
+        errorMessage: string;
+      }
+  );
+
 function rowToAttempt(row: ProcessingAttemptRow): ProcessingAttempt {
   return {
     id: row.id,
@@ -129,6 +144,94 @@ export function recordProcessingAttempt(
         input.exitStatus,
         diagnostic,
       );
+    const stored = selectAttempt(connection.database, id);
+    if (stored === undefined) {
+      throw new Error("Processing attempt could not be read after storage.");
+    }
+    return rowToAttempt(stored);
+  } finally {
+    connection.close();
+  }
+}
+
+export function completeAudioProcessing(
+  dataRoot: string,
+  input: CompleteAudioProcessingInput,
+): ProcessingAttempt {
+  validateInput(input);
+  if (
+    (input.status === "succeeded" && input.transcript.trim().length === 0) ||
+    (input.status === "failed" && input.errorMessage.trim().length === 0)
+  ) {
+    throw new Error("Invalid audio-processing completion.");
+  }
+
+  const connection = openKnowledgeDatabase(dataRoot);
+  try {
+    const record = connection.database
+      .prepare("SELECT source_type FROM records WHERE id = ?")
+      .get(input.recordId) as { source_type: string } | undefined;
+    if (record?.source_type !== "audio") {
+      throw new Error("Audio processing requires an existing audio record.");
+    }
+
+    const id = randomUUID();
+    const diagnostic =
+      input.diagnostic === null
+        ? null
+        : input.diagnostic.length <= maximumDiagnosticLength
+          ? input.diagnostic
+          : `${input.diagnostic.slice(0, maximumDiagnosticLength - 3)}...`;
+    connection.database.exec("BEGIN IMMEDIATE");
+    try {
+      connection.database
+        .prepare(`
+          INSERT INTO processing_attempts (
+            id, record_id, schema_version, implementation,
+            implementation_version, model_filename, model_checksum, language,
+            started_at, completed_at, status, exit_status, diagnostic
+          ) VALUES (?, ?, 1, 'whisper-cli', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          id,
+          input.recordId,
+          input.implementationVersion.trim(),
+          input.modelFilename,
+          input.modelChecksum,
+          input.language,
+          input.startedAt,
+          input.completedAt,
+          input.status,
+          input.exitStatus,
+          diagnostic,
+        );
+      if (input.status === "succeeded") {
+        connection.database
+          .prepare(`
+            UPDATE records
+            SET normalized_text = ?, state = 'ready', error_message = NULL
+            WHERE id = ?
+          `)
+          .run(input.transcript, input.recordId);
+      } else {
+        const errorMessage =
+          input.errorMessage.length <= maximumDiagnosticLength
+            ? input.errorMessage
+            : `${input.errorMessage.slice(0, maximumDiagnosticLength - 3)}...`;
+        connection.database
+          .prepare(`
+            UPDATE records
+            SET state = 'failed', error_message = ?
+            WHERE id = ?
+          `)
+          .run(errorMessage, input.recordId);
+      }
+      connection.database.exec("COMMIT");
+    } catch (error) {
+      connection.database.exec("ROLLBACK");
+      throw error;
+    }
+
     const stored = selectAttempt(connection.database, id);
     if (stored === undefined) {
       throw new Error("Processing attempt could not be read after storage.");

@@ -61,9 +61,14 @@ text, repository documents, inbox files, and local audio transcription.
   normalizes UTF-8 transcript output, bounds and redacts failure diagnostics,
   and removes temporary output on every exit path. Schema version 4 adds
   immutable, versioned processing-attempt metadata linked to audio records.
-- Next: Connect normalization, transcription, and processing-attempt recording
-  to pending audio records; commit transcript text through the existing FTS
-  path while preserving retry identity.
+- 2026-06-22: Pending-audio orchestration completed. It reloads the durable
+  managed source, validates its stored media descriptor, normalizes and
+  transcribes through the existing adapters, and atomically commits the
+  transcript, FTS-visible ready state, and immutable attempt metadata. Failed
+  attempts preserve bounded diagnostics and retry under the same record
+  identity; ready records are idempotent no-ops.
+- Next: Connect successful audio processing to `knowledge add-audio` and inbox
+  workflows using resolved local tool configuration and version diagnostics.
 
 ## Delivery Sequence
 
