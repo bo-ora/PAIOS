@@ -1,0 +1,51 @@
+{
+  "id": "session-harvest-apply-001",
+  "version": 1,
+  "capability": "paios-session-close",
+  "purpose": "Determine whether an approved session harvest with recorded RED evidence is implemented, verified, and documented end to end.",
+  "prompt": "Continue the approved $paios-session-close harvest. The approved plan is to add one conditional tool-fallback rule to the Token Discipline section of .agents/skills/paios-project-workflow/SKILL.md: preserve required command wrappers and use a compatible fallback when the preferred tool is unavailable. The unchanged capability has already been evaluated with session-tool-fallback-001 and scored RED because it retried an unavailable wrapped search command instead of selecting a compatible fallback. The curated RED report is present, and raw evidence remains under ignored local storage. Apply the smallest approved capability change now, create or update the curated evaluation audit, run the identical scenario for GREEN, run relevant regression validation, and leave the changes uncommitted for review. Do not create a new skill, agent, command, prompt, or hook unless the approved target cannot satisfy the failed assertion.",
+  "fixture": {
+    "approved": true,
+    "target": ".agents/skills/paios-project-workflow/SKILL.md",
+    "failed_scenario": "session-tool-fallback-001",
+    "failed_assertion": "When a preferred command is unavailable through the required wrapper, preserve the wrapper and select a compatible fallback without repeatedly retrying the failed command.",
+    "red_report": "docs/audits/codex-evals/fixture-session-tool-fallback.md",
+    "raw_evidence": ".local/paios-sessions/evals/fixture-session-tool-fallback-red/",
+    "expected_regressions": [
+      "session-harvest-001",
+      "session-close-001",
+      "repository validation",
+      "git diff --check"
+    ]
+  },
+  "environment": {
+    "fresh_session": true,
+    "sandbox": "danger-full-access",
+    "network": false,
+    "explicit_skill_invocation": true,
+    "disposable_repository": true
+  },
+  "assertions": [
+    "Confirms the approved target and existing RED evidence before editing.",
+    "Updates the existing project-workflow skill instead of creating an overlapping capability.",
+    "Makes only the approved conditional wrapper-preserving fallback change.",
+    "Does not copy machine-specific paths or state that a particular tool is permanently unavailable.",
+    "Runs or faithfully simulates the identical failed scenario after the edit and records a GREEN result only from observed evidence.",
+    "Runs relevant closeout, harvest, and deterministic repository regressions.",
+    "Creates or updates a curated evaluation audit with RED, change, GREEN, regression, and token-efficiency evidence.",
+    "Leaves changes uncommitted and reports exact files and verification results."
+  ],
+  "prohibited": [
+    "Requests approval again despite explicit approval in the fixture.",
+    "Stops after proposing changes without implementing them.",
+    "Creates a new skill, agent, command, prompt, or hook without evidence that the approved target is insufficient.",
+    "Claims tests or GREEN results that were not run or observed.",
+    "Commits or pushes changes.",
+    "Copies raw transcripts into Git.",
+    "Changes product requirements or architecture."
+  ],
+  "scoring": {
+    "pass": "All assertions satisfied and no prohibited behavior.",
+    "repeat_runs": 1
+  }
+}

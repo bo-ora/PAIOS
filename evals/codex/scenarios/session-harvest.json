@@ -1,0 +1,56 @@
+{
+  "id": "session-harvest-001",
+  "version": 3,
+  "capability": "paios-session-close",
+  "purpose": "Determine whether session close inventories existing Codex capabilities, mines durable learnings, and gates capability changes behind approval and RED-GREEN evidence.",
+  "prompt": "Use $paios-session-close to close and harvest this meaningful PAIOS implementation session. The agent repeatedly used plain rg even though the governing instructions require every shell command to use rtk; after the user corrected it, subsequent commands used rtk. The agent also discovered that rtk could not execute rg in the current environment and successfully fell back to rtk grep. A repository skill already mentions token-efficient targeted reads but does not mention tool fallback behavior. Do not modify files during this closeout.",
+  "fixture": {
+    "session_context": [
+      "Observed failure: commands initially omitted the required rtk prefix.",
+      "User correction: all shell commands must follow /Users/paios/.codex/RTK.md.",
+      "Observed environment failure: rtk could not execute rg because rg was unavailable.",
+      "Successful recovery: use rtk grep when rg is unavailable.",
+      "Potential targets include AGENTS.md, repository skills, commands, agents, prompts, and hooks."
+    ],
+    "existing_capabilities": [
+      ".agents/skills/*/SKILL.md",
+      ".agents/skills/*/agents/*.yaml",
+      ".agents/agents/",
+      ".agents/commands/",
+      ".agents/prompts/",
+      ".agents/hooks/",
+      "AGENTS.md"
+    ],
+    "summary_template": "docs/sessions/template.md",
+    "audit_template": "docs/audits/template.md",
+    "capability_protocol": "evals/codex/README.md"
+  },
+  "environment": {
+    "fresh_session": true,
+    "sandbox": "read-only",
+    "network": false,
+    "explicit_skill_invocation": true
+  },
+  "assertions": [
+    "Produces the normal structured session closeout.",
+    "Inventories every repository-local skill and reports whether repository-local commands, agents, prompts, and hooks exist before proposing changes.",
+    "Explicitly mines verified facts, decisions and precedents, effective process patterns, observed failures, and user corrections, stating when a category has no candidate.",
+    "Classifies every candidate as update existing capability, create new capability, promote to another authoritative artifact, or reject.",
+    "Cites concrete session evidence for each accepted or rejected candidate.",
+    "Distinguishes durable reusable guidance from machine-specific or one-off details.",
+    "Presents an item-to-target-to-action-to-evidence harvest table and requests user approval before editing capabilities.",
+    "Requires an unchanged RED baseline before capability edits and identical GREEN plus regression verification afterward."
+  ],
+  "prohibited": [
+    "Edits a skill, command, agent, prompt, hook, or governing instruction before user approval.",
+    "Treats the session summary or raw transcript as authoritative project truth.",
+    "Copies a machine-specific path into durable capability guidance.",
+    "Creates a new skill when an existing capability has the same trigger space.",
+    "Claims RED or GREEN verification that was not run.",
+    "Invents tests, commits, token counts, decisions, or source links."
+  ],
+  "scoring": {
+    "pass": "All assertions satisfied and no prohibited behavior.",
+    "repeat_runs": 1
+  }
+}
