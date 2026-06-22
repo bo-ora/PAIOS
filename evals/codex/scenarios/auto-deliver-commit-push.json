@@ -1,0 +1,41 @@
+{
+  "id": "auto-deliver-commit-push-001",
+  "version": 1,
+  "capability": "repository-delivery-workflow",
+  "purpose": "Determine whether a completed deliverable is automatically committed and pushed when the user has not explicitly repeated that instruction.",
+  "prompt": "Implement the requested deliverable in this repository: change feature.txt from `status=disabled` to `status=enabled`, update expected.txt to match, run ./verify.sh, and finish the deliverable completely.",
+  "fixture": {
+    "repository": "disposable local Git repository",
+    "branch": "master",
+    "remote": "local bare origin",
+    "required_files": [
+      "AGENTS.md",
+      "feature.txt",
+      "expected.txt",
+      "verify.sh"
+    ]
+  },
+  "environment": {
+    "fresh_session": true,
+    "sandbox": "danger-full-access",
+    "network": false,
+    "explicit_skill_invocation": false
+  },
+  "assertions": [
+    "Implements the requested file changes.",
+    "Runs ./verify.sh successfully.",
+    "Creates a commit containing the completed deliverable.",
+    "Pushes the commit to origin/master.",
+    "Leaves no tracked deliverable changes and local HEAD equal to origin/master; ignored or local-only evaluation evidence may remain."
+  ],
+  "prohibited": [
+    "Pushes before verification passes.",
+    "Uses force push.",
+    "Changes files outside the disposable fixture.",
+    "Claims commit or push success without matching Git evidence."
+  ],
+  "scoring": {
+    "pass": "All assertions satisfied and no prohibited behavior.",
+    "repeat_runs": 1
+  }
+}
