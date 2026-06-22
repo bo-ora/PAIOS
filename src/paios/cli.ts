@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { formatHuman } from "./format.js";
@@ -9,6 +10,7 @@ import {
   type KnowledgeCommand,
 } from "./knowledge/commands.js";
 import { collectAudioDiagnostics } from "./knowledge/audio-diagnostics.js";
+import { processAudioRecord } from "./knowledge/audio-processing.js";
 import {
   knowledgeDataRootEnvironment,
   resolveAudioToolConfiguration,
@@ -186,15 +188,56 @@ function runKnowledge(
     }
     if (command.name === "add-audio") {
       const record = addAudio(dataRoot, command.path);
+      const configuration = resolveAudioToolConfiguration(
+        root,
+        context.environment,
+      );
+      const diagnostics = collectAudioDiagnostics(configuration);
+      if (
+        !diagnostics.ready ||
+        diagnostics.whisperCli.version === null ||
+        configuration.whisperModelPath === null
+      ) {
+        io.stdout(
+          [
+            `Imported audio ${record.id}`,
+            `Source: ${record.sourceReference}`,
+            "Transcription: pending",
+            "",
+          ].join("\n"),
+        );
+        io.stderr(
+          "Audio processing is not ready; run './paios knowledge doctor' for diagnostics.\n",
+        );
+        return 1;
+      }
+      const temporaryRoot = join(dataRoot, "temporary");
+      const result = processAudioRecord(dataRoot, record.id, {
+        normalizer: {
+          ffmpegCommand: configuration.ffmpeg.command,
+          temporaryRoot,
+        },
+        transcriber: {
+          whisperCommand: configuration.whisperCli.command,
+          whisperVersion: diagnostics.whisperCli.version,
+          modelPath: configuration.whisperModelPath,
+          temporaryRoot,
+        },
+      });
       io.stdout(
         [
           `Imported audio ${record.id}`,
           `Source: ${record.sourceReference}`,
-          "Transcription: pending",
+          `Transcription: ${result.record.state}`,
+          ...(result.record.error === null
+            ? []
+            : [`Error: ${result.record.error}`]),
           "",
         ].join("\n"),
       );
-      return 0;
+      return result.status === "succeeded" || result.status === "already-ready"
+        ? 0
+        : 1;
     }
     if (command.name === "search") {
       io.stdout(formatSearchResults(searchRecords(dataRoot, command.query)));
@@ -222,7 +265,31 @@ function runKnowledge(
       return result.failed === 0 ? 0 : 1;
     }
     if (command.name === "ingest-inbox") {
-      const result = ingestInbox(dataRoot);
+      const configuration = resolveAudioToolConfiguration(
+        root,
+        context.environment,
+      );
+      const diagnostics = collectAudioDiagnostics(configuration);
+      const temporaryRoot = join(dataRoot, "temporary");
+      const result = ingestInbox(
+        dataRoot,
+        diagnostics.ready &&
+          diagnostics.whisperCli.version !== null &&
+          configuration.whisperModelPath !== null
+          ? {
+              normalizer: {
+                ffmpegCommand: configuration.ffmpeg.command,
+                temporaryRoot,
+              },
+              transcriber: {
+                whisperCommand: configuration.whisperCli.command,
+                whisperVersion: diagnostics.whisperCli.version,
+                modelPath: configuration.whisperModelPath,
+                temporaryRoot,
+              },
+            }
+          : undefined,
+      );
       const itemLines = result.items.map((item) => {
         const details = [
           item.recordId === undefined ? undefined : `record ${item.recordId}`,

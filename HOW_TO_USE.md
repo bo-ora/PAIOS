@@ -140,22 +140,30 @@ printf '%s\n' "Inbox knowledge" > .local/paios/inbox/example.md
 Successfully imported files move to `.local/paios/inbox-processed/` only after
 their durable records exist. Duplicate files also move when the matching
 durable record already exists, which makes a rerun recover an interrupted move.
-Unsupported entries and failed inputs remain in the inbox. WAV, MP3, and M4A
-files are recognized but remain failed until local audio processing is added.
+Unsupported entries and failed inputs remain in the inbox. Audio inputs are
+captured before processing; missing configuration or a transcription failure
+retains both the original inbox input and its durable pending or failed record
+for a later retry.
 
 ## Import Audio for Local Processing
 
-Preserve a WAV, MP3, or M4A source as a durable pending audio record:
+Import and locally transcribe a WAV, MP3, or M4A source:
 
 ```bash
 ./paios knowledge add-audio PATH
 ```
 
 The command validates the media signature rather than trusting the filename,
-stores the unchanged source under the configured data root, and records detected
-container and codec metadata. Local FFmpeg normalization and Whisper
-transcription are not implemented yet, so the record remains `pending` and is
-not searchable.
+stores the unchanged source under the configured data root, and records
+detected container and codec metadata. When the configured local audio
+dependencies are ready, it normalizes with FFmpeg, transcribes with
+`whisper-cli`, records immutable implementation/model attempt metadata, and
+makes the transcript searchable.
+
+If configuration is missing or invalid, the command exits nonzero after
+retaining a durable `pending` record and points to `knowledge doctor`. A
+transcription failure retains a durable `failed` record and bounded diagnostic;
+retrying the same managed record does not create a second record.
 
 ## Configure and Diagnose Local Audio Tools
 
@@ -179,12 +187,51 @@ The command exits zero only when all three dependencies are ready. Missing or
 invalid dependencies are all reported in one run with the relevant
 configuration variable.
 
-The internal FFmpeg adapter is implemented and verified with deterministic
-process fixtures. It accepts original bytes plus the detected media descriptor,
-normalizes to temporary 16 kHz mono signed 16-bit PCM WAV, validates the output,
-and removes temporary input and output files after success or failure. It is
-not yet connected to `add-audio`; that command remains pending until local
-transcription and durable attempt recording are implemented together.
+The FFmpeg and `whisper-cli` adapters accept the detected media descriptor and
+configured local model, use bounded subprocess timeouts, and remove temporary
+audio and transcript files after success or failure. `add-audio` and inbox
+processing reuse the same durable orchestration.
+
+## Run the Opt-In Real Audio Integration Harness
+
+The normal `npm test` suite remains deterministic, offline, and independent of
+installed audio tools. The separate real-tool harness is disabled unless
+explicitly enabled. It requires:
+
+- `PAIOS_RUN_AUDIO_INTEGRATION=1` to opt in;
+- `PAIOS_AUDIO_INTEGRATION_FIXTURE_PATH` pointing to a readable local audio
+  file containing speech;
+- `PAIOS_WHISPER_MODEL_PATH` pointing to a readable local GGML model;
+- optional `PAIOS_FFMPEG_PATH` and `PAIOS_WHISPER_CLI_PATH` overrides, otherwise
+  the executables resolve from `PATH`;
+- optional `PAIOS_AUDIO_INTEGRATION_LANGUAGE`, default `auto`, using `auto` or
+  a two- or three-letter lowercase language code;
+- optional `PAIOS_AUDIO_INTEGRATION_TIMEOUT_MS`, default `600000`, applied to
+  each FFmpeg or transcription subprocess.
+
+Example:
+
+```bash
+export PAIOS_RUN_AUDIO_INTEGRATION=1
+export PAIOS_AUDIO_INTEGRATION_FIXTURE_PATH="$HOME/test-audio/spoken-sample.wav"
+export PAIOS_FFMPEG_PATH="/opt/homebrew/bin/ffmpeg"
+export PAIOS_WHISPER_CLI_PATH="$HOME/src/whisper.cpp/build/bin/whisper-cli"
+export PAIOS_WHISPER_MODEL_PATH="$HOME/.local/share/whisper/ggml-base.bin"
+export PAIOS_AUDIO_INTEGRATION_LANGUAGE="en"
+npm run test:audio-integration
+```
+
+The harness first checks the existing redacted audio diagnostics. It uses real
+FFmpeg to derive disposable WAV, MP3, M4A, and Telegram-compatible OGG/Opus
+inputs from the supplied fixture, then sends each through durable import,
+normalization, real `whisper-cli` transcription, processing-attempt metadata,
+and lexical search. All generated media, transcripts, and runtime records stay
+under a temporary directory and are removed at the end. The harness never
+downloads a tool, model, or fixture.
+
+Without the opt-in variable or required local paths, the harness reports a
+clear skip. Invalid language or timeout values fail with a configuration error.
+This harness does not run the separate `tiny`, `base`, and `small` benchmark.
 
 ## Rebuild the Search Index
 
@@ -228,6 +275,7 @@ Before committing implementation or documentation changes:
 npm run lint
 npm run typecheck
 npm test
+npm run test:audio-integration  # optional; requires the configuration above
 npm run build
 python3 -m unittest discover -s tests -v
 python3 scripts/validate_repository.py .
@@ -236,6 +284,6 @@ git diff --check
 
 ## Not Implemented Yet
 
-Connecting normalization to audio records, local Whisper transcription,
-durable attempt metadata, and searchable transcript storage remain to be
+The fixed-sample `tiny`, `base`, and `small` transcription benchmark,
+backup/restore workflow, and remaining Phase 1 acceptance review are not yet
 implemented.

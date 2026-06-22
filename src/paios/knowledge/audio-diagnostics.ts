@@ -15,6 +15,7 @@ export type DiagnosticState = "ready" | "missing" | "error";
 export interface DiagnosticResult {
   state: DiagnosticState;
   summary: string;
+  version: string | null;
 }
 
 export interface AudioDiagnostics {
@@ -64,26 +65,31 @@ function diagnoseExecutable(
       return {
         state: "missing",
         summary: `${label} was not found via ${source}; install it or set ${environmentName}.`,
+        version: null,
       };
     }
     return {
       state: "error",
       summary: `${label} could not run via ${source}.`,
+      version: null,
     };
   }
   if (result.status !== 0) {
     return {
       state: "error",
       summary: `${label} exited with status ${result.status ?? "unknown"} via ${source}.`,
+      version: null,
     };
   }
 
+  const version = boundedVersion(
+    `${result.stdout}\n${result.stderr}`,
+    configured.command,
+  );
   return {
     state: "ready",
-    summary: `${boundedVersion(
-      `${result.stdout}\n${result.stderr}`,
-      configured.command,
-    )} (${source})`,
+    summary: `${version} (${source})`,
+    version,
   };
 }
 
@@ -119,6 +125,7 @@ function diagnoseModel(path: string | null): DiagnosticResult {
       state: "missing",
       summary:
         "No model is configured; set PAIOS_WHISPER_MODEL_PATH to a local GGML model.",
+      version: null,
     };
   }
 
@@ -127,12 +134,14 @@ function diagnoseModel(path: string | null): DiagnosticResult {
     return {
       state: "ready",
       summary: `${basename(path)} (${byteLength} bytes, sha256 ${checksum})`,
+      version: null,
     };
   } catch {
     return {
       state: "error",
       summary:
         "The configured model is not a readable, non-empty regular file.",
+      version: null,
     };
   }
 }

@@ -67,8 +67,51 @@ text, repository documents, inbox files, and local audio transcription.
   transcript, FTS-visible ready state, and immutable attempt metadata. Failed
   attempts preserve bounded diagnostics and retry under the same record
   identity; ready records are idempotent no-ops.
-- Next: Connect successful audio processing to `knowledge add-audio` and inbox
-  workflows using resolved local tool configuration and version diagnostics.
+- 2026-06-22: `knowledge add-audio` now resolves redacted structured executable
+  version metadata, invokes local normalization and transcription when all
+  dependencies are ready, reports the resulting state, and retains a durable
+  pending record with actionable diagnostics when configuration is incomplete.
+- 2026-06-22: Inbox audio now uses the same durable capture and processing
+  service, retains inputs and record identifiers across missing configuration
+  or transcription failure, retries failed records in place, and moves inputs
+  only after the transcript is durably ready and searchable.
+- 2026-06-23: Added an explicitly opt-in real-tool integration harness that
+  derives disposable WAV, MP3, M4A, and Telegram-compatible OGG/Opus inputs
+  with real FFmpeg, sends each through durable import, normalization,
+  `whisper-cli`, attempt metadata, and search, and skips clearly when local
+  configuration is absent. Offline tests cover opt-in/configuration behavior
+  and the exact format plan; the normal suite remains tool-independent.
+- 2026-06-23: Real dependency readiness was checked without installing or
+  downloading anything. `knowledge doctor` reported FFmpeg and `whisper-cli`
+  missing from `PATH` and no configured GGML model. Homebrew reported both
+  `ffmpeg` and `whisper-cpp` uninstalled; targeted local searches found no
+  executable, GGML model, or suitable speech fixture. The disabled and
+  enabled-but-unconfigured harness invocations each completed with one explicit
+  skip, so no real format/transcription case ran and no executable version,
+  model checksum, fixture result, or benchmark evidence exists yet.
+- 2026-06-23: With explicit approval, installed local FFmpeg 8.1.2 and
+  whisper.cpp 1.9.1, temporarily downloaded multilingual `ggml-base.bin`
+  (147951465 bytes, SHA-256
+  `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe`),
+  and generated an 8.104-second non-sensitive synthetic English fixture with
+  the macOS Samantha voice. `knowledge doctor` reported all dependencies ready.
+  The real harness passed durable import, normalization, transcription,
+  attempt metadata, and lexical search for WAV (2702 ms), MP3 (2816 ms), M4A
+  (2821 ms), and Telegram-compatible OGG/Opus (2867 ms), with 14.06 seconds
+  total wall time. The temporary fixture, model, generated media, transcripts,
+  and runtime records were removed after verification.
+- Next approved-boundary proposal: add a separate opt-in fixed-sample benchmark
+  for multilingual `ggml-tiny.bin`, `ggml-base.bin`, and `ggml-small.bin`
+  without changing production defaults. Generate the same non-sensitive
+  English fixture locally, normalize it once to canonical 16 kHz mono PCM WAV,
+  run one warm-up plus three measured sequential transcriptions per model with
+  the same executable, language, arguments, and machine state, and record tool
+  versions, model filenames/byte lengths/checksums, transcript text, word error
+  rate against the known sentence, wall time, real-time factor, and peak
+  resident memory. Keep the normal suite offline, remove all models and
+  generated/runtime data after the run, and document a recommendation without
+  changing ADR-0003's `base` default. Downloading the three benchmark models
+  and implementing this harness require explicit approval.
 
 ## Delivery Sequence
 

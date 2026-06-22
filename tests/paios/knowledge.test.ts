@@ -17,6 +17,9 @@ import { afterEach, test } from "node:test";
 
 import { runCli, type CliContext, type CliIo } from "../../src/paios/cli.js";
 import {
+  collectAudioDiagnostics,
+} from "../../src/paios/knowledge/audio-diagnostics.js";
+import {
   AudioNormalizationError,
   type AudioProcessRunner,
   withNormalizedAudio,
@@ -193,6 +196,19 @@ test("audio diagnostics validate configured executables and model without exposi
   assert.match(output, /Audio processing: ready/);
   assert.doesNotMatch(output, new RegExp(root));
   assert.deepEqual(captured.stderr, []);
+
+  const diagnostics = collectAudioDiagnostics(
+    resolveAudioToolConfiguration(root, {
+      [ffmpegPathEnvironment]: ffmpeg,
+      [whisperCliPathEnvironment]: whisperCli,
+      [whisperModelPathEnvironment]: model,
+    }),
+  );
+  assert.equal(diagnostics.ffmpeg.version, "ffmpeg version test-build");
+  assert.equal(
+    diagnostics.whisperCli.version,
+    "whisper-cli whisper.cpp test-build",
+  );
 });
 
 test("audio diagnostics report every missing dependency with actionable configuration", () => {
@@ -1411,7 +1427,7 @@ test("CLI imports, searches, rebuilds, and returns useful validation errors", ()
   );
 });
 
-test("CLI imports durable audio and reports pending transcription", () => {
+test("CLI retains durable pending audio when local transcription is not configured", () => {
   const root = temporaryRoot();
   const dataRoot = join(root, "knowledge");
   const audioPath = join(root, "voice.wav");
@@ -1425,12 +1441,91 @@ test("CLI imports durable audio and reports pending transcription", () => {
       captured.io,
       { environment: {}, stdin: () => "" },
     ),
-    0,
+    1,
   );
   assert.match(captured.stdout.join(""), /Imported audio [0-9a-f-]+/);
   assert.match(captured.stdout.join(""), /Source: sources\/audio\/.+\.wav/);
   assert.match(captured.stdout.join(""), /Transcription: pending/);
+  assert.equal(
+    captured.stderr.join(""),
+    "Audio processing is not ready; run './paios knowledge doctor' for diagnostics.\n",
+  );
+  const recordId = /Imported audio ([0-9a-f-]+)/.exec(
+    captured.stdout.join(""),
+  )?.[1];
+  assert.notEqual(recordId, undefined);
+  assert.equal(getRecord(dataRoot, recordId ?? "")?.state, "pending");
+});
+
+test("CLI transcribes configured audio and records resolved version metadata", () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const audioPath = join(root, "voice.wav");
+  const normalizedPath = join(root, "normalized.wav");
+  const ffmpeg = join(root, "ffmpeg");
+  const whisperCli = join(root, "whisper-cli");
+  const model = join(root, "ggml-test.bin");
+  writeFileSync(audioPath, wavFixture());
+  writeFileSync(normalizedPath, wavFixture());
+  writeFileSync(model, "model");
+  writeFileSync(
+    ffmpeg,
+    [
+      "#!/usr/bin/env node",
+      'const fs = require("node:fs");',
+      'if (process.argv.includes("-version")) {',
+      '  console.log("ffmpeg version cli-test");',
+      "} else {",
+      `  fs.copyFileSync(${JSON.stringify(normalizedPath)}, process.argv.at(-1));`,
+      "}",
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(
+    whisperCli,
+    [
+      "#!/usr/bin/env node",
+      'const fs = require("node:fs");',
+      'if (process.argv.includes("--version")) {',
+      '  console.log("whisper-cli cli-test");',
+      "} else {",
+      '  const outputIndex = process.argv.indexOf("-of");',
+      '  fs.writeFileSync(`${process.argv[outputIndex + 1]}.txt`, "searchable audio transcript\\n");',
+      "}",
+      "",
+    ].join("\n"),
+  );
+  chmodSync(ffmpeg, 0o755);
+  chmodSync(whisperCli, 0o755);
+  const captured = capture();
+
+  assert.equal(
+    runCli(
+      ["knowledge", "add-audio", audioPath, "--data-root", dataRoot],
+      root,
+      captured.io,
+      {
+        environment: {
+          [ffmpegPathEnvironment]: ffmpeg,
+          [whisperCliPathEnvironment]: whisperCli,
+          [whisperModelPathEnvironment]: model,
+        },
+        stdin: () => "",
+      },
+    ),
+    0,
+  );
+  const output = captured.stdout.join("");
+  assert.match(output, /Imported audio [0-9a-f-]+/);
+  assert.match(output, /Transcription: ready/);
   assert.deepEqual(captured.stderr, []);
+  const recordId = /Imported audio ([0-9a-f-]+)/.exec(output)?.[1] ?? "";
+  assert.equal(getRecord(dataRoot, recordId)?.normalizedText, "searchable audio transcript");
+  assert.equal(
+    listProcessingAttempts(dataRoot, recordId)[0]?.implementationVersion,
+    "whisper-cli cli-test",
+  );
+  assert.equal(searchRecords(dataRoot, "searchable")[0]?.recordId, recordId);
 });
 
 test("repository indexing is stable, idempotent, and updates changed sources", () => {
@@ -1606,7 +1701,7 @@ test("inbox processing is stable across documents, duplicates, skips, and failur
   writeFileSync(join(inbox, "a.md"), "# First\nstable inbox document");
   writeFileSync(join(inbox, "ignored.json"), "{}");
   writeFileSync(join(nested, "bad.txt"), Buffer.from([0xc3, 0x28]));
-  writeFileSync(join(nested, "voice.mp3"), "audio placeholder");
+  writeFileSync(join(nested, "voice.wav"), wavFixture());
   symlinkSync(join(inbox, "a.md"), join(inbox, "linked.md"));
   const duplicateSource = join(root, "duplicate.txt");
   writeFileSync(duplicateSource, "already durable");
@@ -1623,7 +1718,7 @@ test("inbox processing is stable across documents, duplicates, skips, and failur
       ["linked.md", "skipped"],
       ["nested/bad.txt", "failed"],
       ["nested/duplicate.txt", "duplicate"],
-      ["nested/voice.mp3", "failed"],
+      ["nested/voice.wav", "failed"],
       ["z.txt", "processed"],
     ],
   );
@@ -1637,9 +1732,15 @@ test("inbox processing is stable across documents, duplicates, skips, and failur
     { processed: 2, duplicates: 1, skipped: 2, failed: 2 },
   );
   assert.equal(
-    result.items.find((item) => item.status === "duplicate")?.recordId,
+    result.items.find((item) => item.path === "nested/duplicate.txt")?.recordId,
     duplicate.id,
   );
+  const audioItem = result.items.find(
+    (item) => item.path === "nested/voice.wav",
+  );
+  assert.match(audioItem?.recordId ?? "", /^[0-9a-f-]+$/);
+  assert.match(audioItem?.message ?? "", /knowledge doctor/);
+  assert.equal(getRecord(dataRoot, audioItem?.recordId ?? "")?.state, "pending");
   assert.ok(existsSync(join(root, "runtime", "inbox-processed", "a.md")));
   assert.ok(
     existsSync(
@@ -1647,9 +1748,70 @@ test("inbox processing is stable across documents, duplicates, skips, and failur
     ),
   );
   assert.ok(existsSync(join(inbox, "nested", "bad.txt")));
-  assert.ok(existsSync(join(inbox, "nested", "voice.mp3")));
+  assert.ok(existsSync(join(inbox, "nested", "voice.wav")));
   assert.ok(existsSync(join(inbox, "ignored.json")));
   assert.equal(searchRecords(dataRoot, "stable inbox").length, 2);
+});
+
+test("inbox audio failure retries under the same record and moves only after success", () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "runtime", "knowledge");
+  const inbox = join(root, "runtime", "inbox");
+  const processed = join(root, "runtime", "inbox-processed");
+  const modelPath = join(root, "ggml-base.bin");
+  mkdirSync(inbox, { recursive: true });
+  writeFileSync(join(inbox, "voice.wav"), wavFixture());
+  writeFileSync(modelPath, "model fixture");
+  const normalizer = {
+    ffmpegCommand: "ffmpeg",
+    temporaryRoot: join(root, "normalize"),
+    runProcess: (_command: string, args: string[]) => {
+      writeFileSync(args[16] ?? "", canonicalWavFixture());
+      return { status: 0, stderr: "" };
+    },
+  };
+  const transcriber = {
+    whisperCommand: "whisper-cli",
+    whisperVersion: "whisper.cpp inbox-test",
+    modelPath,
+    temporaryRoot: join(root, "transcribe"),
+    runProcess: () => ({ status: 7, stderr: "fixture failure" }),
+  };
+
+  const failed = ingestInbox(dataRoot, { normalizer, transcriber });
+  assert.equal(failed.failed, 1);
+  assert.equal(failed.items[0]?.status, "failed");
+  assert.match(failed.items[0]?.message ?? "", /status 7/);
+  const recordId = failed.items[0]?.recordId ?? "";
+  assert.equal(getRecord(dataRoot, recordId)?.state, "failed");
+  assert.ok(existsSync(join(inbox, "voice.wav")));
+  assert.ok(!existsSync(join(processed, "voice.wav")));
+
+  const recovered = ingestInbox(dataRoot, {
+    normalizer,
+    transcriber: {
+      ...transcriber,
+      runProcess: (_command, args) => {
+        writeFileSync(`${args[8]}.txt`, "recovered inbox audio");
+        return { status: 0, stderr: "" };
+      },
+    },
+  });
+  assert.deepEqual(
+    {
+      processed: recovered.processed,
+      duplicates: recovered.duplicates,
+      skipped: recovered.skipped,
+      failed: recovered.failed,
+    },
+    { processed: 1, duplicates: 0, skipped: 0, failed: 0 },
+  );
+  assert.equal(recovered.items[0]?.recordId, recordId);
+  assert.equal(getRecord(dataRoot, recordId)?.state, "ready");
+  assert.equal(searchRecords(dataRoot, "recovered")[0]?.recordId, recordId);
+  assert.ok(!existsSync(join(inbox, "voice.wav")));
+  assert.ok(existsSync(join(processed, "voice.wav")));
+  assert.equal(listProcessingAttempts(dataRoot, recordId).length, 2);
 });
 
 test("inbox rerun recovers an interrupted move without another record", () => {
@@ -1691,7 +1853,7 @@ test("inbox CLI prints every result and returns nonzero after partial failure", 
   const inbox = join(root, "runtime", "inbox");
   mkdirSync(inbox, { recursive: true });
   writeFileSync(join(inbox, "good.md"), "CLI inbox success");
-  writeFileSync(join(inbox, "later.wav"), "audio placeholder");
+  writeFileSync(join(inbox, "later.wav"), wavFixture());
   const captured = capture();
 
   assert.equal(
@@ -1706,7 +1868,7 @@ test("inbox CLI prints every result and returns nonzero after partial failure", 
   assert.match(captured.stdout.join(""), /PROCESSED: good\.md — record /);
   assert.match(
     captured.stdout.join(""),
-    /FAILED: later\.wav — Local audio processing is not implemented yet\./,
+    /FAILED: later\.wav — record [0-9a-f-]+; Audio processing is not ready;/,
   );
   assert.match(captured.stdout.join(""), /Processed: 1/);
   assert.match(captured.stdout.join(""), /Failed: 1/);

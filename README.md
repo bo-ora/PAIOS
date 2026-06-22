@@ -75,13 +75,13 @@ The default ignored data root is `.local/paios/knowledge/`. Override it with
 from transactional SQLite metadata and rebuildable FTS5 search state.
 
 Markdown/text import, repository indexing, deterministic inbox processing,
-search, and rebuild are implemented. `knowledge add-audio` now preserves
-content-validated audio and provider-neutral media metadata in a pending record;
-`knowledge doctor` validates explicitly configured FFmpeg, `whisper-cli`, and
-local model dependencies without exposing their absolute paths. The
-provider-neutral FFmpeg adapter now normalizes supported bytes to temporary
-16 kHz mono PCM WAV with timeout and cleanup guarantees. Transcription and
-end-to-end audio processing remain pending.
+search, and rebuild are implemented. `knowledge add-audio` and inbox processing
+preserve content-validated audio and provider-neutral media metadata, then use
+configured local FFmpeg and `whisper-cli` adapters to create searchable
+transcripts with durable attempt metadata. `knowledge doctor` validates the
+executables and local GGML model without exposing configured absolute paths.
+The normal suite uses deterministic process fixtures; an explicitly opt-in
+real-tool harness covers WAV, MP3, M4A, and Telegram-compatible OGG/Opus.
 
 See [HOW_TO_USE.md](HOW_TO_USE.md) for short, verified scenarios and expected
 behavior.

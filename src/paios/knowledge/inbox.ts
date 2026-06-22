@@ -17,8 +17,14 @@ import type {
   InboxItemStatus,
 } from "../types.js";
 import {
+  type AudioProcessingOptions,
+  processAudioRecord,
+} from "./audio-processing.js";
+import {
+  addAudio,
   addFile,
   DuplicateKnowledgeError,
+  getRecord,
   KnowledgeInputError,
 } from "./records.js";
 
@@ -128,7 +134,10 @@ function addResult(
   }
 }
 
-export function ingestInbox(dataRoot: string): InboxIngestResult {
+export function ingestInbox(
+  dataRoot: string,
+  audioProcessing?: AudioProcessingOptions,
+): InboxIngestResult {
   const { inboxRoot, processedRoot } = inboxPaths(dataRoot);
   mkdirSync(inboxRoot, { recursive: true, mode: 0o700 });
   let canonicalInbox: string;
@@ -169,11 +178,78 @@ export function ingestInbox(dataRoot: string): InboxIngestResult {
       continue;
     }
     if (item.kind === "audio") {
-      addResult(result, {
-        path: item.relativePath,
-        status: "failed",
-        message: "Local audio processing is not implemented yet.",
-      });
+      let recordId: string;
+      let duplicate = false;
+      try {
+        recordId = addAudio(dataRoot, item.path).id;
+      } catch (error) {
+        if (error instanceof DuplicateKnowledgeError) {
+          duplicate = true;
+          recordId = error.existingRecordId;
+        } else {
+          addResult(result, {
+            path: item.relativePath,
+            status: "failed",
+            message:
+              error instanceof KnowledgeInputError
+                ? error.message
+                : "Audio capture failed.",
+          });
+          continue;
+        }
+      }
+
+      const existingRecord = getRecord(dataRoot, recordId);
+      if (existingRecord?.sourceType !== "audio") {
+        addResult(result, {
+          path: item.relativePath,
+          status: "failed",
+          recordId,
+          message: "Durable audio record could not be read.",
+        });
+        continue;
+      }
+      if (existingRecord.state !== "ready" && audioProcessing === undefined) {
+        addResult(result, {
+          path: item.relativePath,
+          status: "failed",
+          recordId,
+          message:
+            "Audio processing is not ready; run './paios knowledge doctor' for diagnostics.",
+        });
+        continue;
+      }
+
+      const processing =
+        existingRecord.state === "ready"
+          ? { status: "already-ready" as const, record: existingRecord }
+          : processAudioRecord(dataRoot, recordId, audioProcessing!);
+      if (processing.record.state !== "ready") {
+        addResult(result, {
+          path: item.relativePath,
+          status: "failed",
+          recordId,
+          message:
+            processing.record.error ?? "Local audio processing failed.",
+        });
+        continue;
+      }
+
+      try {
+        moveToProcessed(canonicalInbox, processedRoot, item.path);
+        addResult(result, {
+          path: item.relativePath,
+          status: duplicate ? "duplicate" : "processed",
+          recordId,
+        });
+      } catch {
+        addResult(result, {
+          path: item.relativePath,
+          status: "failed",
+          recordId,
+          message: "Durable record exists, but moving the inbox input failed.",
+        });
+      }
       continue;
     }
 
