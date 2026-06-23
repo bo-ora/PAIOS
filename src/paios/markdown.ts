@@ -245,14 +245,25 @@ export function collectRoadmap(
     );
     return empty;
   }
+  if (phases.length === 0) {
+    warnings.push(`Malformed ${path}: Phase Table has no valid phases`);
+    return empty;
+  }
+  // An active (in-progress/blocked) phase wins, then a refining/approved phase.
+  // When none is active — a valid "between approved phases" state, e.g. all
+  // delivered phases are completed and the next is still provisional — fall back
+  // to the first phase that is neither completed nor deferred so status orients
+  // the user to what comes next, without a misleading "malformed" warning.
   const currentPhase =
     executing[0] ??
     phases.find(
       (phase) => phase.state === "refining" || phase.state === "approved",
     ) ??
+    phases.find(
+      (phase) => phase.state !== "completed" && phase.state !== "deferred",
+    ) ??
     null;
   if (currentPhase === null) {
-    warnings.push(`Malformed ${path}: no current phase found`);
     return empty;
   }
   const currentIndex = phases.findIndex((phase) => phase === currentPhase);

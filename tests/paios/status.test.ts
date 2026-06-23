@@ -190,6 +190,39 @@ test("warns when roadmap data has multiple active phases", () => {
   );
 });
 
+test("treats the first non-completed phase as current without warning when none is active", () => {
+  const { root } = fixture();
+  writeFixtureFile(
+    root,
+    "docs/ROADMAP.md",
+    `# PAIOS Roadmap
+
+## Phase Table
+
+| Phase | State | User value |
+| --- | --- | --- |
+| **0 — Development Operating System** | \`completed\` | Develop consistently. |
+| **1 — Local Knowledge Loop** | \`completed\` | Capture knowledge locally. |
+| **2 — Telegram Daily Assistant** | \`completed\` | Use PAIOS from Telegram. |
+| **3 — Health Journal** | \`provisional\` | Record health observations. |
+| **4 — Wearable Health** | \`provisional\` | Automate health metrics. |
+`,
+  );
+
+  const status = collectStatus(root);
+
+  assert.deepEqual(status.roadmap.currentPhase, {
+    id: 3,
+    name: "Health Journal",
+    state: "provisional",
+    value: "Record health observations.",
+  });
+  assert.equal(status.roadmap.nextPhase?.id, 4);
+  assert.ok(
+    !status.warnings.some((warning) => warning.includes("no current phase")),
+  );
+});
+
 test("selects the first unfinished phase during requirements refinement", () => {
   const { root } = fixture();
   writeFixtureFile(

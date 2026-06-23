@@ -83,6 +83,14 @@ boundaries, and adapter contracts. Every bug fix should include a regression
 test. Integration tests must use disposable repositories, containers, or
 isolated test databases.
 
+For a slice whose behavior depends on an external local runtime or model (for
+example a local LLM, transcription engine, or other subprocess), the faked-
+boundary suite is necessary but not sufficient: run one live local smoke test
+against the real runtime before declaring it done, and record the evidence. Such
+tests caught issues the deterministic suite could not (e.g. retrieval recall and
+model grounding). Keep them out of the default suite (opt-in, never networked to
+a non-local service).
+
 Before declaring completion, run relevant tests, repository validation,
 `git diff --check`, and review the full diff. Record exact evidence in the
 related plan or session summary.
