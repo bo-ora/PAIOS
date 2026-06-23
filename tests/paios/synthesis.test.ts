@@ -7,10 +7,32 @@ import {
   extractCitations,
   toSearchQuery,
 } from "../../src/paios/synthesis/provider.js";
+import type { FetchLike } from "../../src/paios/http-fetch.js";
+import { createOllamaProvider } from "../../src/paios/synthesis/ollama-provider.js";
 
 function record(recordId: string, text: string): RetrievedRecord {
   return { recordId, title: null, sourceReference: `sources/${recordId}`, text };
 }
+
+function fakeChatFetch(
+  content: string,
+  init: { ok?: boolean; status?: number } = {},
+): { fetch: FetchLike; calls: string[] } {
+  const calls: string[] = [];
+  const fetch: FetchLike = (url) => {
+    calls.push(url);
+    return Promise.resolve({
+      ok: init.ok ?? true,
+      status: init.status ?? 200,
+      json: () =>
+        Promise.resolve({ message: { role: "assistant", content } }),
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    });
+  };
+  return { fetch, calls };
+}
+
+const synthesisConfig = { ollamaHost: "http://127.0.0.1:11434", model: "test-model" };
 
 test("toSearchQuery tokenises to a safe OR query", () => {
   assert.equal(
@@ -44,5 +66,34 @@ test("extractCitations returns supplied ids in record order, ignoring unknown", 
   assert.deepEqual(
     extractCitations("see [r3] and [r1] and [r9]", records),
     ["r1", "r3"],
+  );
+});
+
+test("ollama provider returns no-sources without calling the model", async () => {
+  const { fetch, calls } = fakeChatFetch("unused");
+  const provider = createOllamaProvider({ config: synthesisConfig, fetch });
+  const result = await provider.synthesize({ question: "q", records: [] });
+  assert.equal(result.outcome, "no-sources");
+  assert.equal(calls.length, 0);
+});
+
+test("ollama provider posts to /api/chat and extracts citations", async () => {
+  const { fetch, calls } = fakeChatFetch("The key is under the mat [r1].");
+  const provider = createOllamaProvider({ config: synthesisConfig, fetch });
+  const result = await provider.synthesize({
+    question: "where is the key",
+    records: [record("r1", "key under mat"), record("r2", "unrelated")],
+  });
+  assert.equal(result.outcome, "answered");
+  assert.match(result.answer, /under the mat/);
+  assert.deepEqual(result.citedRecordIds, ["r1"]);
+  assert.ok(calls.some((url) => url.includes("/api/chat")));
+});
+
+test("ollama provider throws on a non-ok response", async () => {
+  const { fetch } = fakeChatFetch("", { ok: false, status: 500 });
+  const provider = createOllamaProvider({ config: synthesisConfig, fetch });
+  await assert.rejects(
+    provider.synthesize({ question: "q", records: [record("r1", "x")] }),
   );
 });
