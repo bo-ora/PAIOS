@@ -10,17 +10,20 @@ visual projection of the phase table. If they disagree, the table wins.
 
 ## Current Position
 
-- Current phase: **Phase 2 — Telegram Daily Assistant** (not yet started)
-- State: **proposed**
-- Current value target: use PAIOS naturally during daily life from Telegram.
+- Current phase: **Phase 3 — Health Journal** (next; provisional)
+- State: **provisional**
+- Current value target: record and import health observations and trace every
+  conclusion to source records.
 - Next candidate: **Phase 3 — Health Journal**
-- Roadmap confidence: Phase 0 and Phase 1 are completed. Phase 1 was delivered
-  in commit `102f01f` with a passing `master` GitHub Actions run, satisfying its
-  exit criteria after local acceptance and independent severity review. Phase 2
-  now has approved requirements
-  (`docs/requirements/phase-2-telegram-daily-assistant.md`, 2026-06-23) and is
-  ready for architecture and planning before implementation; later phases are
-  provisional.
+- Roadmap confidence: Phases 0, 1, and 2 are completed. Phase 2 (Telegram Daily
+  Assistant) was implemented behind stable messaging and answer-synthesis
+  provider interfaces (ADR-0005, ADR-0006), reusing Phase 1 storage,
+  transcription, and lexical search; it satisfied its exit criteria after the
+  full local gate (lint, typecheck, 123 unit/integration tests with both
+  provider boundaries faked, build, repository validation), a live local-model
+  readiness and answer smoke test, and an independent review finding no critical
+  or high privacy, data-loss, authorization, or correctness issue. Phase 3 is
+  provisional and needs approved requirements before implementation.
 
 ## Visual Roadmap
 
@@ -28,7 +31,7 @@ visual projection of the phase table. If they disagree, the table wins.
 flowchart LR
     P0["Phase 0<br/>Development Operating System<br/>COMPLETED"]
     P1["Phase 1<br/>Local Knowledge Loop<br/>COMPLETED"]
-    P2["Phase 2<br/>Telegram Daily Assistant<br/>PROPOSED"]
+    P2["Phase 2<br/>Telegram Daily Assistant<br/>COMPLETED"]
     P3["Phase 3<br/>Health Journal<br/>PROVISIONAL"]
     P4["Phase 4<br/>Wearable Health Intelligence<br/>PROVISIONAL"]
     P5["Phase 5<br/>Durable Personal Automation<br/>PROVISIONAL"]
@@ -44,7 +47,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | **0 — Development Operating System** | `completed` | PAIOS can be developed consistently and resumed after time away. | Codex operating model; requirements/ADR/plan/session/audit structure; RED–GREEN capability evaluations; repository validation; local raw-session capture; TypeScript `./paios status`; roadmap and debt tracking; one audited delivery cycle. | None | Status CLI passes lint, typecheck, tests, build, human/JSON acceptance checks; roadmap appears in status; CI, delivery session, process audit, and phase review are committed. |
 | **1 — Local Knowledge Loop** | `completed` | Capture personal knowledge locally and find it later with sources. | CLI and inbox capture; Markdown/text and repository-document ingestion; audio-file transcription; local durable storage; lexical/full-text search; sourced retrieval. | Phase 0 | A note, document, and audio recording can each be captured, stored, searched, and retrieved offline with source references. |
-| **2 — Telegram Daily Assistant** | `proposed` | Use PAIOS naturally during daily life from Telegram. | Telegram workspace model; text, voice, and document capture; transcription; knowledge search; source-backed answers; safe command/approval boundaries. | Phase 1 | Telegram can capture supported inputs and answer from the local knowledge base with traceable sources and no silent data loss. |
+| **2 — Telegram Daily Assistant** | `completed` | Use PAIOS naturally during daily life from Telegram. | Telegram workspace model; text, voice, and document capture; transcription; knowledge search; source-backed answers; safe command/approval boundaries. | Phase 1 | Telegram can capture supported inputs and answer from the local knowledge base with traceable sources and no silent data loss. |
 | **3 — Health Journal** | `provisional` | Understand manually recorded health observations before relying on wearable APIs. | Symptoms, habits, workouts, sleep observations, manual measurements, CSV/JSON imports, sourced trend reports. | Phase 1; optionally Phase 2 | The user can record and import health data, review trends, and trace every conclusion to source records. |
 | **4 — Wearable Health Intelligence** | `provisional` | Automate collection and analysis of health metrics. | Replaceable wearable adapters; normalized health model; synchronization; anomalies; trends; correlations; recommendation safeguards. | Phase 3 | At least one wearable provider synchronizes reliably through an adapter, and normalized insights remain traceable and recoverable. |
 | **5 — Durable Personal Automation** | `provisional` | Run long-lived personal workflows that survive interruptions. | Scheduling; approval gates; checkpoints; retries; resumability; execution history; cancellation; failure recovery. | Phase 0; informed by real Phase 1–4 workflows | A useful multi-step workflow survives restart and recoverable failures without losing approved state or history. |
