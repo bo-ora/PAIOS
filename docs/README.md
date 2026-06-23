@@ -1,6 +1,11 @@
 # Project Knowledge
 
-PAIOS treats reviewed repository documents as durable project memory.
+PAIOS treats reviewed repository documents as durable project memory. This
+knowledgebase is agent-neutral: it is the shared source of truth for both
+development harnesses (Codex via `AGENTS.md`, Claude Code via `CLAUDE.md`, which
+imports `AGENTS.md`). Skills are authored once under `.agents/skills/` and shared
+with Claude Code through the `.claude/skills` symlink — never duplicated. See
+[ADR 0004](architecture/decisions/0004-multi-harness-and-bootstrap.md).
 
 ## Artifact Map
 

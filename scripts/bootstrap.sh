@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+#
+# PAIOS fresh-machine bootstrap (macOS).
+#
+# Unlike `./lde.sh`, which is read-only and only *checks* prerequisites, this
+# script *installs* them, then performs the reproducible project bootstrap and
+# finishes by running `./lde.sh` to verify the machine is green.
+#
+# It is idempotent: re-running it on a configured machine is safe and fast.
+#
+#   scripts/bootstrap.sh            # install host tools, Node 24 (nvm), build
+#   scripts/bootstrap.sh --check    # run ./lde.sh only, install nothing
+#
+# Authoritative inventory: docs/operations/development-environment.md
+
+set -euo pipefail
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$ROOT"
+
+CHECK_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --check) CHECK_ONLY=1 ;;
+        -h|--help)
+            grep '^#' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *)
+            printf 'Unknown argument: %s (try --help)\n' "$arg" >&2
+            exit 2
+            ;;
+    esac
+done
+
+step() { printf '\n==> %s\n' "$1"; }
+info() { printf '    %s\n' "$1"; }
+
+if [ "$CHECK_ONLY" -eq 1 ]; then
+    exec ./lde.sh
+fi
+
+if [ "$(uname -s)" != "Darwin" ]; then
+    info "This bootstrap targets macOS. On other platforms, install the tools in"
+    info "docs/operations/development-environment.md manually, then run ./lde.sh."
+    exit 1
+fi
+
+# --- 1. Homebrew -------------------------------------------------------------
+step "Ensuring Homebrew is installed"
+if ! command -v brew >/dev/null 2>&1; then
+    info "Homebrew not found; installing (non-interactive)."
+    NONINTERACTIVE=1 /bin/bash -c \
+        "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    # Make brew available in this shell for both Apple Silicon and Intel.
+    if [ -x /opt/homebrew/bin/brew ]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -x /usr/local/bin/brew ]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+else
+    info "Homebrew present: $(command -v brew)"
+fi
+
+# --- 2. Host tools via Brewfile ---------------------------------------------
+step "Installing host tools from Brewfile"
+BREW_PREFIX="$(brew --prefix)"
+if [ ! -w "$BREW_PREFIX" ]; then
+    info "Homebrew prefix is not writable: $BREW_PREFIX"
+    info "Fix ownership once, then re-run this script:"
+    info "  sudo chown -R \"$(whoami)\" \"$BREW_PREFIX\""
+    exit 1
+fi
+brew bundle --file="$ROOT/Brewfile"
+
+# --- 3. Node.js (pinned by .nvmrc, managed by nvm) ---------------------------
+step "Ensuring Node.js $(cat "$ROOT/.nvmrc") via nvm"
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$NVM_DIR/nvm.sh"
+    nvm install
+    nvm use
+    info "Active Node: $(node --version)"
+else
+    info "nvm not found at \$NVM_DIR ($NVM_DIR)."
+    info "Install nvm (https://github.com/nvm-sh/nvm) and re-run, or install"
+    info "Node $(cat "$ROOT/.nvmrc")+ another way (e.g. 'brew install node')."
+    if command -v node >/dev/null 2>&1; then
+        info "Current node on PATH: $(node --version)"
+    fi
+fi
+
+# --- 4. Reproducible project bootstrap --------------------------------------
+step "Installing pinned npm dependencies (npm ci)"
+npm ci
+
+step "Building the PAIOS CLI"
+npm run build
+
+# --- 5. Verify ---------------------------------------------------------------
+step "Verifying environment (./lde.sh)"
+./lde.sh

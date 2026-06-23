@@ -18,7 +18,18 @@ install packages or change machine configuration.
 | Python | 3.9 or newer | Repository validation and Codex capture utilities | Standard-library scripts under `scripts/` |
 | Git identity | `user.name` and `user.email` | Local commits | User-level Git configuration |
 
-Run:
+Provision a fresh macOS machine in one step:
+
+```bash
+scripts/bootstrap.sh
+```
+
+This installs the host tools declared in `Brewfile` (via Homebrew), installs the
+pinned Node major from `.nvmrc` through nvm, runs `npm ci` and `npm run build`,
+and finishes by running `./lde.sh`. It is idempotent; `scripts/bootstrap.sh
+--check` verifies without installing.
+
+On an already-provisioned machine, the manual equivalent is:
 
 ```bash
 ./lde.sh
@@ -27,7 +38,8 @@ npm run build
 ```
 
 `npm ci` is the reproducible project bootstrap after machine prerequisites
-exist.
+exist. `scripts/bootstrap.sh` installs those prerequisites; `./lde.sh` only
+checks them and never mutates the machine.
 
 ## Installed but Not Available in the Current Shell
 
@@ -96,11 +108,12 @@ Use this progression:
 1. Keep `lde.sh` as the fast, read-only prerequisite and configuration check.
 2. Pin project dependencies through lockfiles and container manifests.
 3. Add `compose.yaml` when the first service actually needs containers.
-4. Add an installing bootstrap or Ansible only after a second machine exposes
-   repeated manual setup work.
-5. Keep installation actions explicit; never make `lde.sh` silently mutate a
-   developer machine.
+4. `scripts/bootstrap.sh` + `Brewfile` + `.nvmrc` provide the installing
+   bootstrap for macOS, keeping the tool inventory declarative and reproducible.
+   See [ADR 0004](../architecture/decisions/0004-multi-harness-and-bootstrap.md).
+5. Keep installation actions explicit and confined to `scripts/bootstrap.sh`;
+   never make `lde.sh` silently mutate a developer machine.
 
-This avoids premature provisioning infrastructure while preserving a clear
-inventory that can later become Ansible, Dev Containers, Nix, or another
-reproducible environment definition.
+The declarative `Brewfile` and `.nvmrc` can later be lifted into Ansible, Dev
+Containers, Nix, or another reproducible environment definition without changing
+the inventory.

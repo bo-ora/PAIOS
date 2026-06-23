@@ -11,7 +11,15 @@ Node test suite under `tests/paios/`. Place future Python services in
 configuration and templates in Git; generated `dist/` output and runtime data
 belong in ignored paths.
 
-## Codex Working Model
+## Agent Working Model (Codex and Claude Code)
+
+PAIOS supports two peer development harnesses: Codex and Claude Code. These
+rules, the knowledge model, and the definition of done apply to both. Skills are
+authored once under `.agents/skills/` and exposed to Claude Code through the
+`.claude/skills` symlink, so there is one canonical source. Claude Code reads
+`CLAUDE.md`, which imports this file; Codex reads this file directly. The
+`docs/architecture/codex-operating-model.md` record is harness-neutral despite
+its historical name.
 
 Give each session one primary role: requirements, research, architecture,
 planning, implementation, testing, monitoring, documentation, or audit. State
@@ -34,6 +42,9 @@ the baseline passes, do not change the capability.
 Use Node.js 24 or newer. The Project Status CLI has no runtime npm dependencies;
 TypeScript and Node type definitions are development dependencies:
 
+- `scripts/bootstrap.sh` — install host prerequisites (Homebrew + Brewfile),
+  Node 24 via nvm/`.nvmrc`, run `npm ci` and `npm run build`, then verify with
+  `./lde.sh`. Idempotent; use `--check` to verify only.
 - `./lde.sh` — check required and phase-specific machine prerequisites without
   changing the machine.
 - `git status --short --branch` — review local changes and the active branch.
