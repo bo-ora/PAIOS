@@ -1,5 +1,5 @@
 import * as assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
@@ -27,11 +27,14 @@ import {
   createTelegramProvider,
   normalizeUpdate,
 } from "../../src/paios/telegram/telegram-provider.js";
-import { addNote } from "../../src/paios/knowledge/records.js";
+import { addNote, getRecord, searchRecords } from "../../src/paios/knowledge/records.js";
+import type { AudioProcessingOptions } from "../../src/paios/knowledge/audio-processing.js";
 import {
   answerQuestion,
   formatAnswerReply,
 } from "../../src/paios/telegram/ask.js";
+import { captureMessage } from "../../src/paios/telegram/capture.js";
+import type { MessagingProvider } from "../../src/paios/telegram/messaging.js";
 
 const temporaryRoots: string[] = [];
 
@@ -391,4 +394,161 @@ test("answerQuestion reports no-sources without calling the model", async () => 
   assert.equal(result.outcome, "no-sources");
   assert.equal(requests.length, 0);
   assert.match(formatAnswerReply(result), /couldn't find|could not find/i);
+});
+
+function wavBytes(): Uint8Array {
+  const bytes = Buffer.alloc(44);
+  bytes.write("RIFF", 0);
+  bytes.writeUInt32LE(36, 4);
+  bytes.write("WAVE", 8);
+  bytes.write("fmt ", 12);
+  bytes.writeUInt32LE(16, 16);
+  bytes.writeUInt16LE(1, 20);
+  bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt32LE(16_000, 24);
+  bytes.writeUInt32LE(32_000, 28);
+  bytes.writeUInt16LE(2, 32);
+  bytes.writeUInt16LE(16, 34);
+  bytes.write("data", 36);
+  bytes.writeUInt32LE(0, 40);
+  return bytes;
+}
+
+function canonicalWav(): Buffer {
+  const bytes = Buffer.from(wavBytes());
+  bytes.writeUInt16LE(1, 20);
+  return bytes;
+}
+
+/** A messaging provider stub whose download returns fixed bytes. */
+function downloadProvider(bytes: Uint8Array): MessagingProvider {
+  return {
+    poll: () => Promise.resolve([]),
+    sendReply: () => Promise.resolve(),
+    downloadAttachment: () => Promise.resolve(bytes),
+    acknowledge: () => Promise.resolve(),
+  };
+}
+
+/** Build AudioProcessingOptions backed by deterministic fake subprocesses. */
+function fakeAudioOptions(root: string, transcript: string): AudioProcessingOptions {
+  const temporaryRoot = join(root, "temporary");
+  const modelPath = join(root, "model.bin");
+  writeFileSync(modelPath, "model fixture");
+  return {
+    normalizer: {
+      ffmpegCommand: "ffmpeg",
+      temporaryRoot,
+      runProcess: (_command, args) => {
+        writeFileSync(args[16] ?? "", canonicalWav());
+        return { status: 0, stderr: "" };
+      },
+    },
+    transcriber: {
+      whisperCommand: "whisper-cli",
+      whisperVersion: "fake 1.0",
+      modelPath,
+      temporaryRoot,
+      runProcess: (_command, args) => {
+        writeFileSync(`${args[8]}.txt`, transcript);
+        return { status: 0, stderr: "" };
+      },
+    },
+  };
+}
+
+function inboundFor(
+  kind: InboundMessage["kind"],
+  extra: Partial<InboundMessage>,
+): InboundMessage {
+  return {
+    provider: "telegram",
+    messageId: "55",
+    workspace: { channel: "telegram", chatId: "100" },
+    senderId: "100",
+    kind,
+    timestamp: "2026-06-23T00:00:00.000Z",
+    cursor: "55",
+    ...extra,
+  };
+}
+
+test("captureMessage stores a text note with Telegram provenance", async () => {
+  const root = temporaryRoot();
+  const result = await captureMessage(
+    inboundFor("text", { text: "buy oat milk" }),
+    { dataRoot: root, tempRoot: join(root, "tmp"), provider: downloadProvider(new Uint8Array()) },
+  );
+  assert.equal(result.status, "captured");
+  const record = getRecord(root, result.recordId ?? "");
+  assert.equal(record?.sourceType, "note");
+  assert.equal(record?.provenance.adapter, "telegram-note");
+  assert.deepEqual(record?.provenance.externalReference, {
+    channel: "telegram",
+    chatId: "100",
+    messageId: "55",
+  });
+});
+
+test("captureMessage imports a supported document and refuses an unsupported one", async () => {
+  const root = temporaryRoot();
+  const md = await captureMessage(
+    inboundFor("document", {
+      attachment: { reference: "f1", originalName: "plan.md" },
+    }),
+    {
+      dataRoot: root,
+      tempRoot: join(root, "tmp"),
+      provider: downloadProvider(Buffer.from("# Plan\nship it\n")),
+    },
+  );
+  assert.equal(md.status, "captured");
+  assert.equal(getRecord(root, md.recordId ?? "")?.sourceType, "managed-file");
+
+  const bin = await captureMessage(
+    inboundFor("document", {
+      attachment: { reference: "f2", originalName: "blob.bin" },
+    }),
+    {
+      dataRoot: root,
+      tempRoot: join(root, "tmp"),
+      provider: downloadProvider(Buffer.from([0, 1, 2, 3])),
+    },
+  );
+  assert.equal(bin.status, "refused");
+  assert.equal(bin.recordId, undefined);
+});
+
+test("captureMessage reports a duplicate text capture", async () => {
+  const root = temporaryRoot();
+  const deps = {
+    dataRoot: root,
+    tempRoot: join(root, "tmp"),
+    provider: downloadProvider(new Uint8Array()),
+  };
+  await captureMessage(inboundFor("text", { text: "same body" }), deps);
+  const second = await captureMessage(
+    inboundFor("text", { text: "same body", messageId: "56", cursor: "56" }),
+    deps,
+  );
+  assert.equal(second.status, "duplicate");
+});
+
+test("captureMessage transcribes a voice note so its transcript is searchable", async () => {
+  const root = temporaryRoot();
+  const result = await captureMessage(
+    inboundFor("voice", { attachment: { reference: "vf" } }),
+    {
+      dataRoot: root,
+      tempRoot: join(root, "tmp"),
+      provider: downloadProvider(wavBytes()),
+      audio: fakeAudioOptions(root, "remember the umbrella"),
+    },
+  );
+  assert.equal(result.status, "captured");
+  const record = getRecord(root, result.recordId ?? "");
+  assert.equal(record?.sourceType, "audio");
+  assert.equal(record?.state, "ready");
+  const hits = searchRecords(root, '"umbrella"');
+  assert.ok(hits.some((hit) => hit.recordId === result.recordId));
 });
