@@ -2265,3 +2265,22 @@ function getRecordByChecksumForTest(
     database.close();
   }
 }
+
+test("addNote records a custom adapter and external reference", () => {
+  const root = temporaryRoot();
+  const record = addNote(
+    root,
+    { content: "telegram note body" },
+    {
+      adapter: "telegram-note",
+      externalReference: { channel: "telegram", chatId: "42", messageId: "7" },
+    },
+  );
+  assert.equal(record.provenance.adapter, "telegram-note");
+  const reloaded = getRecord(root, record.id);
+  assert.deepEqual(reloaded?.provenance.externalReference, {
+    channel: "telegram",
+    chatId: "42",
+    messageId: "7",
+  });
+});

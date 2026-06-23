@@ -130,6 +130,11 @@ export interface AddNoteInput {
   title?: string;
 }
 
+export interface CaptureProvenance {
+  adapter: string;
+  externalReference?: Record<string, string>;
+}
+
 interface CaptureManagedInput {
   sourceType: Extract<KnowledgeSourceType, "note" | "managed-file" | "audio">;
   title: string | null;
@@ -143,7 +148,24 @@ interface CaptureManagedInput {
   detectedMediaType: string | null;
   detectedContainer?: string;
   detectedCodec?: string;
+  sourceExternalReference?: Record<string, string>;
   finalState?: Extract<KnowledgeRecord["state"], "pending" | "ready">;
+}
+
+function applyProvenance(
+  input: CaptureManagedInput,
+  provenance: CaptureProvenance | undefined,
+): CaptureManagedInput {
+  if (provenance === undefined) {
+    return input;
+  }
+  return {
+    ...input,
+    sourceAdapter: provenance.adapter,
+    ...(provenance.externalReference === undefined
+      ? {}
+      : { sourceExternalReference: provenance.externalReference }),
+  };
 }
 
 function captureManagedSource(
@@ -177,10 +199,10 @@ function captureManagedSource(
           .prepare(`
             INSERT INTO records (
               id, source_type, title, source_reference, captured_at, state,
-              normalized_text, source_adapter, original_name,
-              claimed_mime_type, detected_media_type, detected_container,
-              detected_codec, byte_length, checksum
-            ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              normalized_text, source_adapter, external_reference_json,
+              original_name, claimed_mime_type, detected_media_type,
+              detected_container, detected_codec, byte_length, checksum
+            ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
           .run(
             id,
@@ -190,6 +212,9 @@ function captureManagedSource(
             new Date().toISOString(),
             input.normalizedText,
             input.sourceAdapter,
+            input.sourceExternalReference === undefined
+              ? null
+              : JSON.stringify(input.sourceExternalReference),
             input.originalName,
             input.claimedMimeType,
             input.detectedMediaType,
@@ -209,6 +234,7 @@ function captureManagedSource(
           UPDATE records
           SET title = ?,
               normalized_text = ?,
+              external_reference_json = ?,
               original_name = ?,
               claimed_mime_type = ?,
               detected_media_type = ?,
@@ -222,6 +248,9 @@ function captureManagedSource(
         .run(
           input.title,
           input.normalizedText,
+          input.sourceExternalReference === undefined
+            ? null
+            : JSON.stringify(input.sourceExternalReference),
           input.originalName,
           input.claimedMimeType,
           input.detectedMediaType,
@@ -256,7 +285,11 @@ function captureManagedSource(
   }
 }
 
-export function addNote(dataRoot: string, input: AddNoteInput): KnowledgeRecord {
+export function addNote(
+  dataRoot: string,
+  input: AddNoteInput,
+  provenance?: CaptureProvenance,
+): KnowledgeRecord {
   const normalizedText = normalizeText(input.content);
   if (normalizedText.trim().length === 0) {
     throw new Error("Note content must not be empty.");
@@ -266,18 +299,24 @@ export function addNote(dataRoot: string, input: AddNoteInput): KnowledgeRecord 
     throw new Error("Note title must not be empty.");
   }
 
-  return captureManagedSource(dataRoot, {
-    sourceType: "note",
-    title: title ?? null,
-    normalizedText,
-    sourceAdapter: "cli-note",
-    sourceDirectory: "notes",
-    sourceExtension: ".txt",
-    sourceBytes: Buffer.from(input.content, "utf8"),
-    originalName: null,
-    claimedMimeType: "text/plain; charset=utf-8",
-    detectedMediaType: "text/plain; charset=utf-8",
-  });
+  return captureManagedSource(
+    dataRoot,
+    applyProvenance(
+      {
+        sourceType: "note",
+        title: title ?? null,
+        normalizedText,
+        sourceAdapter: "cli-note",
+        sourceDirectory: "notes",
+        sourceExtension: ".txt",
+        sourceBytes: Buffer.from(input.content, "utf8"),
+        originalName: null,
+        claimedMimeType: "text/plain; charset=utf-8",
+        detectedMediaType: "text/plain; charset=utf-8",
+      },
+      provenance,
+    ),
+  );
 }
 
 const supportedDocumentTypes = new Map([
@@ -397,7 +436,11 @@ function decodeUtf8(bytes: Uint8Array): string {
   }
 }
 
-export function addFile(dataRoot: string, path: string): KnowledgeRecord {
+export function addFile(
+  dataRoot: string,
+  path: string,
+  provenance?: CaptureProvenance,
+): KnowledgeRecord {
   let stats;
   try {
     stats = statSync(path);
@@ -428,21 +471,31 @@ export function addFile(dataRoot: string, path: string): KnowledgeRecord {
   }
   const originalName = basename(path);
 
-  return captureManagedSource(dataRoot, {
-    sourceType: "managed-file",
-    title: originalName,
-    normalizedText,
-    sourceAdapter: "cli-file",
-    sourceDirectory: "files",
-    sourceExtension: extension,
-    sourceBytes: bytes,
-    originalName,
-    claimedMimeType: mediaType,
-    detectedMediaType: mediaType,
-  });
+  return captureManagedSource(
+    dataRoot,
+    applyProvenance(
+      {
+        sourceType: "managed-file",
+        title: originalName,
+        normalizedText,
+        sourceAdapter: "cli-file",
+        sourceDirectory: "files",
+        sourceExtension: extension,
+        sourceBytes: bytes,
+        originalName,
+        claimedMimeType: mediaType,
+        detectedMediaType: mediaType,
+      },
+      provenance,
+    ),
+  );
 }
 
-export function addAudio(dataRoot: string, path: string): KnowledgeRecord {
+export function addAudio(
+  dataRoot: string,
+  path: string,
+  provenance?: CaptureProvenance,
+): KnowledgeRecord {
   let stats;
   try {
     stats = statSync(path);
@@ -467,21 +520,27 @@ export function addAudio(dataRoot: string, path: string): KnowledgeRecord {
     ...(claimedMimeType === undefined ? {} : { claimedMimeType }),
   });
 
-  return captureManagedSource(dataRoot, {
-    sourceType: "audio",
-    title: originalName,
-    normalizedText: "",
-    sourceAdapter: "cli-audio",
-    sourceDirectory: "audio",
-    sourceExtension: `.${descriptor.detectedContainer}`,
-    sourceBytes: bytes,
-    originalName,
-    claimedMimeType: claimedMimeType ?? null,
-    detectedMediaType: descriptor.detectedMediaType,
-    detectedContainer: descriptor.detectedContainer,
-    detectedCodec: descriptor.detectedCodec,
-    finalState: "pending",
-  });
+  return captureManagedSource(
+    dataRoot,
+    applyProvenance(
+      {
+        sourceType: "audio",
+        title: originalName,
+        normalizedText: "",
+        sourceAdapter: "cli-audio",
+        sourceDirectory: "audio",
+        sourceExtension: `.${descriptor.detectedContainer}`,
+        sourceBytes: bytes,
+        originalName,
+        claimedMimeType: claimedMimeType ?? null,
+        detectedMediaType: descriptor.detectedMediaType,
+        detectedContainer: descriptor.detectedContainer,
+        detectedCodec: descriptor.detectedCodec,
+        finalState: "pending",
+      },
+      provenance,
+    ),
+  );
 }
 
 interface SearchRow {
