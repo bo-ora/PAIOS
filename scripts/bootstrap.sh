@@ -98,6 +98,26 @@ npm ci
 step "Building the PAIOS CLI"
 npm run build
 
-# --- 5. Verify ---------------------------------------------------------------
+# --- 5. Phase 2 setup reminders (no secrets, no model download) --------------
+# Host tools (including ollama) are installed above via the Brewfile. The two
+# Phase 2 steps below are intentionally NOT automated here: they involve secrets
+# and a large model download, so they stay explicit and operator-driven.
+step "Phase 2 (Telegram Daily Assistant) follow-ups"
+if command -v ollama >/dev/null 2>&1; then
+    info "ollama present: $(ollama --version 2>/dev/null | head -1)"
+    info "Pull the Phase 2 model (exact model is in the Phase 2 ADR), e.g.:"
+    info "  ollama pull <model-from-adr>"
+else
+    info "ollama not on PATH yet (installed via Brewfile on a full run)."
+fi
+if [ ! -f "$ROOT/.local/secrets.env" ]; then
+    info "Create the local secrets store before running Phase 2:"
+    info "  cp .env.example .local/secrets.env && chmod 600 .local/secrets.env"
+    info "Fill in credentials per docs/operations/credentials.md."
+else
+    info "Local secrets store present: .local/secrets.env"
+fi
+
+# --- 6. Verify ---------------------------------------------------------------
 step "Verifying environment (./lde.sh)"
 ./lde.sh

@@ -67,6 +67,8 @@ security boundary are approved.
 | FFmpeg | Phase 1 audio normalization | Not installed | Converts WAV, MP3, M4A, and future Telegram OGG/Opus to canonical WAV |
 | `whisper-cli` from `whisper.cpp` | Phase 1 local transcription | Not installed | Requires an explicitly selected local model |
 | Whisper GGML model | Real transcription integration | Not installed | Never download implicitly during capture |
+| Ollama | Phase 2 local answer synthesis | Installed locally (`brew "ollama"`) | Local LLM runtime; the specific small instruct model is pulled with `ollama pull` and recorded in the Phase 2 ADR |
+| Phase 2 synthesis model (Ollama) | Phase 2 ask/answer slice | Not pulled | Never download implicitly; pull the model named in the Phase 2 ADR |
 | Codex CLI | AI-assisted repository workflow | Installed locally; optional for runtime | Raw session events remain under ignored `.local/` |
 | Docker MCP Toolkit/Catalog | Future connector experiments | Desktop capability installed locally | Not a PAIOS runtime dependency |
 
@@ -95,7 +97,11 @@ redacting configured absolute paths.
 - Whisper models.
 - Local `PAIOS_FFMPEG_PATH`, `PAIOS_WHISPER_CLI_PATH`, and
   `PAIOS_WHISPER_MODEL_PATH` values when machine-specific paths are needed.
-- Secrets and populated `.env` files.
+- Secrets and populated `.env` files. All real secret values live in the single
+  store `.local/secrets.env`; the committed template is `.env.example`. The
+  authoritative, value-free inventory of every credential (name, format, where
+  stored, how to obtain) is [credentials.md](credentials.md).
+- Telegram bot token and chat allowlist (Phase 2) — in `.local/secrets.env`.
 - Personal knowledge content under `.local/` or another configured data root.
 
 Commit safe templates and version constraints, never credentials or personal

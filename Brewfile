@@ -21,6 +21,14 @@ brew "python"     # Python 3 for repository validation and Codex capture tooling
 brew "ffmpeg"        # canonical-WAV normalization
 brew "whisper-cpp"   # provides the `whisper-cli` binary for local transcription
 
+# --- Phase 2 (Telegram Daily Assistant) --------------------------------------
+# Local answer-synthesis runtime. Required only once the Phase 2 ask/answer
+# slice is exercised. The host binary is installed here; the specific small
+# instruct model is pulled with `ollama pull` during Phase 2 setup (never
+# implicitly) — the exact model is recorded in the Phase 2 architecture ADR.
+# ffmpeg (above) also normalizes Telegram OGG/Opus voice notes.
+brew "ollama"        # local LLM runtime for source-backed answer synthesis
+
 # --- Optional / future phases ------------------------------------------------
 # Docker becomes required with the first containerized service. Uncomment to
 # provision it ahead of time. Docker Desktop is a large cask install.
