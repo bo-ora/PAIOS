@@ -34,7 +34,16 @@ import {
   formatAnswerReply,
 } from "../../src/paios/telegram/ask.js";
 import { captureMessage } from "../../src/paios/telegram/capture.js";
-import type { MessagingProvider } from "../../src/paios/telegram/messaging.js";
+import type {
+  MessagingProvider,
+  OutboundReply,
+} from "../../src/paios/telegram/messaging.js";
+import {
+  processMessage,
+  runAssistant,
+  runAssistantOnce,
+  type AssistantDeps,
+} from "../../src/paios/telegram/assistant.js";
 
 const temporaryRoots: string[] = [];
 
@@ -551,4 +560,160 @@ test("captureMessage transcribes a voice note so its transcript is searchable", 
   assert.equal(record?.state, "ready");
   const hits = searchRecords(root, '"umbrella"');
   assert.ok(hits.some((hit) => hit.recordId === result.recordId));
+});
+
+/** Stateful fake provider: messages stay pending until acknowledged. */
+class FakeAssistantProvider implements MessagingProvider {
+  private pending: InboundMessage[];
+  readonly sent: OutboundReply[] = [];
+  readonly acked: string[] = [];
+  ackShouldThrow = false;
+  private readonly bytes: Uint8Array;
+  downloadShouldThrow = false;
+
+  constructor(messages: InboundMessage[], bytes: Uint8Array = new Uint8Array()) {
+    this.pending = [...messages];
+    this.bytes = bytes;
+  }
+
+  poll(): Promise<InboundMessage[]> {
+    return Promise.resolve([...this.pending]);
+  }
+
+  sendReply(reply: OutboundReply): Promise<void> {
+    this.sent.push(reply);
+    return Promise.resolve();
+  }
+
+  downloadAttachment(): Promise<Uint8Array> {
+    if (this.downloadShouldThrow) {
+      return Promise.reject(new Error("network down"));
+    }
+    return Promise.resolve(this.bytes);
+  }
+
+  acknowledge(cursor: string): Promise<void> {
+    if (this.ackShouldThrow) {
+      return Promise.reject(new Error("crash before ack persisted"));
+    }
+    this.pending = this.pending.filter((message) => message.cursor !== cursor);
+    this.acked.push(cursor);
+    return Promise.resolve();
+  }
+}
+
+function assistantDeps(
+  root: string,
+  provider: MessagingProvider,
+  synthesis: AnswerSynthesisProvider,
+): AssistantDeps {
+  return {
+    dataRoot: root,
+    tempRoot: join(root, "tmp"),
+    provider,
+    synthesis,
+  };
+}
+
+test("runAssistantOnce captures a text note, replies, and acknowledges", async () => {
+  const root = temporaryRoot();
+  const message = inboundFor("text", { text: "pick up parcel", cursor: "70" });
+  const provider = new FakeAssistantProvider([message]);
+  const { provider: synthesis } = fakeSynthesis("unused");
+  const count = await runAssistantOnce(assistantDeps(root, provider, synthesis));
+  assert.equal(count, 1);
+  assert.match(provider.sent[0]?.text ?? "", /Captured note/);
+  assert.deepEqual(provider.acked, ["70"]);
+  assert.equal(searchRecords(root, '"parcel"').length, 1);
+});
+
+test("processMessage answers a question citing a seeded record", async () => {
+  const root = temporaryRoot();
+  const note = addNote(root, { content: "The router password is hunter2." });
+  const { provider: synthesis } = fakeSynthesis("It is hunter2.");
+  const reply = await processMessage(
+    inboundFor("text", { text: "/ask what is the router password" }),
+    assistantDeps(root, new FakeAssistantProvider([]), synthesis),
+  );
+  assert.match(reply, /hunter2/);
+  assert.match(reply, new RegExp(note.id));
+});
+
+test("processMessage summarises an inspected record and reports missing ones", async () => {
+  const root = temporaryRoot();
+  const note = addNote(root, { content: "inspect me" });
+  const { provider: synthesis } = fakeSynthesis("unused");
+  const deps = assistantDeps(root, new FakeAssistantProvider([]), synthesis);
+  const found = await processMessage(
+    inboundFor("text", { text: `/show ${note.id}` }),
+    deps,
+  );
+  assert.match(found, new RegExp(note.id));
+  assert.match(found, /State: ready/);
+  const missing = await processMessage(
+    inboundFor("text", { text: "/show does-not-exist" }),
+    deps,
+  );
+  assert.match(missing, /not found/i);
+});
+
+test("a failed capture is reported and still acknowledged (no silent drop)", async () => {
+  const root = temporaryRoot();
+  const message = inboundFor("voice", {
+    attachment: { reference: "vf" },
+    cursor: "71",
+  });
+  const provider = new FakeAssistantProvider([message]);
+  provider.downloadShouldThrow = true;
+  const { provider: synthesis } = fakeSynthesis("unused");
+  await runAssistantOnce(assistantDeps(root, provider, synthesis));
+  assert.match(provider.sent[0]?.text ?? "", /failed|went wrong/i);
+  assert.deepEqual(provider.acked, ["71"]);
+});
+
+test("an unacknowledged message is redelivered without duplicating the record", async () => {
+  const root = temporaryRoot();
+  const message = inboundFor("text", { text: "redelivered note", cursor: "72" });
+  const provider = new FakeAssistantProvider([message]);
+  const { provider: synthesis } = fakeSynthesis("unused");
+  const deps = assistantDeps(root, provider, synthesis);
+
+  provider.ackShouldThrow = true;
+  await assert.rejects(runAssistantOnce(deps));
+  assert.equal(searchRecords(root, '"redelivered"').length, 1);
+
+  provider.ackShouldThrow = false;
+  await runAssistantOnce(deps);
+  assert.deepEqual(provider.acked, ["72"]);
+  // The record was committed once; redelivery reported it as a duplicate.
+  assert.equal(searchRecords(root, '"redelivered"').length, 1);
+  assert.match(provider.sent[1]?.text ?? "", /[Aa]lready captured/);
+});
+
+test("a command-looking message is captured as a note, not executed", async () => {
+  const root = temporaryRoot();
+  const message = inboundFor("text", {
+    text: "/delete all my records",
+    cursor: "73",
+  });
+  const provider = new FakeAssistantProvider([message]);
+  const { provider: synthesis } = fakeSynthesis("unused");
+  await runAssistantOnce(assistantDeps(root, provider, synthesis));
+  assert.match(provider.sent[0]?.text ?? "", /Captured note/);
+  const hits = searchRecords(root, '"delete"');
+  assert.equal(hits.length, 1);
+});
+
+test("runAssistant stops when the control predicate is set", async () => {
+  const root = temporaryRoot();
+  const provider = new FakeAssistantProvider([]);
+  const { provider: synthesis } = fakeSynthesis("unused");
+  let ticks = 0;
+  await runAssistant(assistantDeps(root, provider, synthesis), {
+    stop: () => {
+      ticks += 1;
+      return ticks > 2;
+    },
+  });
+  assert.ok(ticks >= 2);
 });
