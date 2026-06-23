@@ -1,6 +1,14 @@
 import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, test } from "node:test";
 
+import type {
+  AnswerSynthesisProvider,
+  SynthesisRequest,
+  SynthesisResult,
+} from "../../src/paios/synthesis/provider.js";
 import type {
   CursorStore,
   InboundMessage,
@@ -19,6 +27,46 @@ import {
   createTelegramProvider,
   normalizeUpdate,
 } from "../../src/paios/telegram/telegram-provider.js";
+import { addNote } from "../../src/paios/knowledge/records.js";
+import {
+  answerQuestion,
+  formatAnswerReply,
+} from "../../src/paios/telegram/ask.js";
+
+const temporaryRoots: string[] = [];
+
+function temporaryRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), "paios-telegram-test-"));
+  temporaryRoots.push(root);
+  return root;
+}
+
+afterEach(() => {
+  for (const root of temporaryRoots) {
+    rmSync(root, { recursive: true, force: true });
+  }
+  temporaryRoots.length = 0;
+});
+
+/** A synthesis provider that records calls and echoes a fixed answer. */
+function fakeSynthesis(answer: string): {
+  provider: AnswerSynthesisProvider;
+  requests: SynthesisRequest[];
+} {
+  const requests: SynthesisRequest[] = [];
+  const provider: AnswerSynthesisProvider = {
+    synthesize(request: SynthesisRequest): Promise<SynthesisResult> {
+      requests.push(request);
+      const citedRecordIds = request.records.map((r) => r.recordId);
+      return Promise.resolve({
+        outcome: "answered",
+        answer,
+        citedRecordIds,
+      });
+    },
+  };
+  return { provider, requests };
+}
 
 function jsonResponse(
   body: unknown,
@@ -319,4 +367,28 @@ test("provider downloads an attachment by resolving its file path", async () => 
   });
   const downloaded = await provider.downloadAttachment({ reference: "fid" });
   assert.deepEqual([...downloaded], [1, 2, 3, 4]);
+});
+
+test("answerQuestion synthesises from a matching local record", async () => {
+  const root = temporaryRoot();
+  const note = addNote(root, {
+    content: "The spare key is under the blue flowerpot.",
+  });
+  const { provider, requests } = fakeSynthesis("It is under the blue flowerpot.");
+  const result = await answerQuestion(root, "where is the spare key", provider);
+  assert.equal(result.outcome, "answered");
+  assert.equal(requests.length, 1);
+  assert.ok(result.citations.some((c) => c.recordId === note.id));
+  assert.match(formatAnswerReply(result), /flowerpot/);
+  assert.match(formatAnswerReply(result), /Sources:/);
+});
+
+test("answerQuestion reports no-sources without calling the model", async () => {
+  const root = temporaryRoot();
+  addNote(root, { content: "totally unrelated content about gardening" });
+  const { provider, requests } = fakeSynthesis("should not be used");
+  const result = await answerQuestion(root, "quantum chromodynamics", provider);
+  assert.equal(result.outcome, "no-sources");
+  assert.equal(requests.length, 0);
+  assert.match(formatAnswerReply(result), /couldn't find|could not find/i);
 });
