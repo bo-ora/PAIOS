@@ -4,7 +4,7 @@ import { copyFileSync, chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 
-import { runCli } from "../../src/paios/cli.js";
+import { runCliSync as runCli } from "../../src/paios/cli.js";
 import { formatHuman } from "../../src/paios/format.js";
 import type { ProjectStatus } from "../../src/paios/types.js";
 import {
@@ -130,7 +130,9 @@ test("invalid usage exits two without collecting status", () => {
       "  ./paios knowledge index PATH [--data-root PATH]\n" +
       "  ./paios knowledge ingest-inbox [--data-root PATH]\n" +
       "  ./paios knowledge search QUERY [--data-root PATH]\n" +
-      "  ./paios knowledge rebuild [--data-root PATH]\n",
+      "  ./paios knowledge rebuild [--data-root PATH]\n" +
+      "  ./paios knowledge backup DESTINATION [--data-root PATH]\n" +
+      "  ./paios knowledge restore BACKUP --data-root EMPTY_DESTINATION\n",
   );
 });
 

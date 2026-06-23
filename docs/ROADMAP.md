@@ -1,7 +1,7 @@
 # PAIOS Roadmap
 
 Status: Active  
-Last reviewed: 2026-06-22  
+Last reviewed: 2026-06-23
 Next scheduled review: 2026-07-22
 
 This file is the authoritative source for project phases, their state, user
@@ -15,9 +15,12 @@ visual projection of the phase table. If they disagree, the table wins.
 - Current value target: capture personal knowledge locally and find it later
   with source references.
 - Next candidate: **Phase 2 — Telegram Daily Assistant**
-- Roadmap confidence: Phase 0 is completed and Phase 1 requirements are
-  approved; Phase 2 has an agreed value boundary but still needs formal
-  requirements; later phases are provisional.
+- Roadmap confidence: Phase 0 is completed. Phase 1 implementation, local
+  acceptance, and independent severity review are complete, but the current
+  uncommitted change still needs authorized delivery and a passing GitHub
+  Actions run before the phase can become `completed`. Phase 2 has an agreed
+  value boundary but still needs formal requirements; later phases are
+  provisional.
 
 ## Visual Roadmap
 

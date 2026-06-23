@@ -9,9 +9,16 @@ import {
   parseKnowledgeCommand,
   type KnowledgeCommand,
 } from "./knowledge/commands.js";
+import {
+  createKnowledgeBackup,
+  KnowledgeBackupError,
+  restoreKnowledgeBackup,
+} from "./knowledge/backup.js";
 import { collectAudioDiagnostics } from "./knowledge/audio-diagnostics.js";
 import { processAudioRecord } from "./knowledge/audio-processing.js";
 import {
+  assertPrivateRepositoryPath,
+  KnowledgeConfigurationError,
   knowledgeDataRootEnvironment,
   resolveAudioToolConfiguration,
   resolveKnowledgeDataRoot,
@@ -116,7 +123,7 @@ function dataRootFor(
   root: string,
   context: CliContext,
 ): string {
-  return resolveKnowledgeDataRoot({
+  const dataRoot = resolveKnowledgeDataRoot({
     repositoryRoot: root,
     ...(command.dataRoot === undefined
       ? {}
@@ -128,6 +135,8 @@ function dataRootFor(
             context.environment[knowledgeDataRootEnvironment],
         }),
   });
+  assertPrivateRepositoryPath(root, dataRoot, "Knowledge data root");
+  return dataRoot;
 }
 
 function runKnowledge(
@@ -328,6 +337,10 @@ function runKnowledge(
       io.stderr(`${error.message}\n`);
       return 2;
     }
+    if (error instanceof KnowledgeConfigurationError) {
+      io.stderr(`${error.message}\n`);
+      return 2;
+    }
     io.stderr("Unable to complete the knowledge operation.\n");
     return 1;
   }
@@ -338,7 +351,7 @@ const defaultContext: CliContext = {
   stdin: () => "",
 };
 
-export function runCli(
+export function runCliSync(
   args: string[],
   root: string,
   io: CliIo,
@@ -354,6 +367,66 @@ export function runCli(
   return 2;
 }
 
+export async function runCli(
+  args: string[],
+  root: string,
+  io: CliIo,
+  context: CliContext = defaultContext,
+): Promise<number> {
+  if (
+    args[0] !== "knowledge" ||
+    (args[1] !== "backup" && args[1] !== "restore")
+  ) {
+    return runCliSync(args, root, io, context);
+  }
+  const command = parseKnowledgeCommand(args.slice(1));
+  if (
+    command === null ||
+    (command.name !== "backup" && command.name !== "restore")
+  ) {
+    io.stderr(knowledgeUsage);
+    return 2;
+  }
+
+  try {
+    assertKnowledgeRuntime();
+    if (command.name === "backup") {
+      const dataRoot = dataRootFor(command, root, context);
+      assertPrivateRepositoryPath(
+        root,
+        command.destination,
+        "Backup destination",
+      );
+      const result = await createKnowledgeBackup(dataRoot, command.destination);
+      io.stdout(
+        `Created knowledge backup with ${result.fileCount} file(s).\nDestination: ${command.destination}\n`,
+      );
+      return 0;
+    }
+    assertPrivateRepositoryPath(
+      root,
+      command.dataRoot,
+      "Restore destination",
+    );
+    const result = restoreKnowledgeBackup(command.backup, command.dataRoot);
+    io.stdout(
+      `Restored ${result.recordCount} knowledge record(s) from ${result.fileCount} file(s).\nIndexed: ${result.indexedRecordCount} ready record(s).\nStale indexed sources: ${result.staleIndexedRecordCount}.\nDestination: ${command.dataRoot}\n`,
+    );
+    return 0;
+  } catch (error) {
+    if (error instanceof KnowledgeBackupError) {
+      io.stderr(`${error.message}\n`);
+      return 1;
+    }
+    if (error instanceof KnowledgeConfigurationError) {
+      io.stderr(`${error.message}\n`);
+      return 2;
+    }
+    io.stderr("Unable to complete the knowledge operation.\n");
+    return 1;
+  }
+}
+
 function repositoryRoot(): string {
   const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
     encoding: "utf8",
@@ -367,13 +440,13 @@ function repositoryRoot(): string {
   return result.stdout.trim();
 }
 
-export function main(args: string[]): number {
+export async function main(args: string[]): Promise<number> {
   const io: CliIo = {
     stdout: (text) => process.stdout.write(text),
     stderr: (text) => process.stderr.write(text),
   };
   try {
-    return runCli(args, repositoryRoot(), io, {
+    return await runCli(args, repositoryRoot(), io, {
       environment: process.env,
       stdin: () => readFileSync(0, "utf8"),
     });
@@ -387,5 +460,5 @@ if (
   process.argv[1] !== undefined &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  process.exitCode = main(process.argv.slice(2));
+  process.exitCode = await main(process.argv.slice(2));
 }

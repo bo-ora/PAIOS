@@ -100,18 +100,40 @@ text, repository documents, inbox files, and local audio transcription.
   (2821 ms), and Telegram-compatible OGG/Opus (2867 ms), with 14.06 seconds
   total wall time. The temporary fixture, model, generated media, transcripts,
   and runtime records were removed after verification.
-- Next approved-boundary proposal: add a separate opt-in fixed-sample benchmark
-  for multilingual `ggml-tiny.bin`, `ggml-base.bin`, and `ggml-small.bin`
-  without changing production defaults. Generate the same non-sensitive
-  English fixture locally, normalize it once to canonical 16 kHz mono PCM WAV,
-  run one warm-up plus three measured sequential transcriptions per model with
-  the same executable, language, arguments, and machine state, and record tool
-  versions, model filenames/byte lengths/checksums, transcript text, word error
-  rate against the known sentence, wall time, real-time factor, and peak
-  resident memory. Keep the normal suite offline, remove all models and
-  generated/runtime data after the run, and document a recommendation without
-  changing ADR-0003's `base` default. Downloading the three benchmark models
-  and implementing this harness require explicit approval.
+- 2026-06-23: Implemented and executed the separately opt-in fixed-sample
+  multilingual transcription benchmark without changing ADR-0003's `base`
+  default. Exact invocation:
+  `PAIOS_RUN_AUDIO_BENCHMARK=1
+  PAIOS_AUDIO_BENCHMARK_TIMEOUT_MS=600000 npm run benchmark:audio`.
+  The harness generated the approved Samantha English fixture, normalized it
+  once to an 8.116-second canonical 16 kHz mono signed 16-bit PCM WAV, then ran
+  one warm-up and three sequential measured transcriptions per model with
+  whisper.cpp 1.9.1, language `en`, and identical arguments. FFmpeg was 8.1.2.
+  Results:
+  - `ggml-tiny.bin`: 77691713 bytes, SHA-256
+    `be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21`;
+    measured wall times 2.058, 2.043, and 2.043 seconds; median 2.043
+    seconds; real-time factor 0.252; maximum measured peak resident memory
+    183005184 bytes; exact normalized reference transcript; word error rate
+    0.000000.
+  - `ggml-base.bin`: 147951465 bytes, SHA-256
+    `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe`;
+    measured wall times 3.511, 3.507, and 3.511 seconds; median 3.511
+    seconds; real-time factor 0.433; maximum measured peak resident memory
+    297254912 bytes; exact normalized reference transcript; word error rate
+    0.000000.
+  - `ggml-small.bin`: 487601967 bytes, SHA-256
+    `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`;
+    measured wall times 9.823, 9.791, and 9.865 seconds; median 9.823
+    seconds; real-time factor 1.210; maximum measured peak resident memory
+    792637440 bytes; normalized transcript began `with a local knowledge`
+    instead of `the local knowledge`; word error rate 0.105263.
+  On this fixed synthetic sample and machine, `tiny` is the evidence-based
+  benchmark recommendation because it matched `base` at zero word error while
+  using less time, memory, and disk. This is not enough representative personal
+  audio evidence to change the production default, so ADR-0003 remains
+  unchanged. All downloaded models, generated audio, transcripts, partial
+  downloads, and benchmark runtime directories were removed after execution.
 
 ## Delivery Sequence
 
@@ -220,6 +242,19 @@ Evidence:
 - Restart after restore and compare record metadata, checksums, transcript
   linkage, and retrieval fixture results.
 
+Status:
+
+- 2026-06-23: Completed the backup/restore slice. `knowledge backup` uses the
+  Node SQLite backup API for a consistent metadata snapshot, copies regular
+  managed source files, and writes a versioned manifest with byte lengths and
+  SHA-256 checksums. `knowledge restore` requires an explicit empty
+  `--data-root`, validates safe paths and the exact package contents before
+  copying, rebuilds derived FTS state, and removes partial output on activation
+  failure. Automated clean-environment evidence compares note, imported-file,
+  audio transcript, processing-attempt, source-byte, and lexical-search state
+  after reopening the restored root. Operational backup, restore,
+  troubleshooting, and recovery steps are documented in `HOW_TO_USE.md`.
+
 ### 8. Phase Acceptance and Review
 
 - Run all repository verification commands.
@@ -240,6 +275,26 @@ Evidence:
 - `git diff --check`
 - GitHub Actions pass
 - no unresolved critical or high review finding
+
+Status:
+
+- 2026-06-23: Local Phase 1 acceptance completed. `./lde.sh` passed with zero
+  failures and warnings; `npm ci` reported zero vulnerabilities; lint,
+  typecheck, 79 Node tests, build, CLI capture/search/rebuild/backup/restore
+  smoke checks, 13 Python tests, repository validation, and whitespace checks
+  passed. The opt-in real audio integration had previously passed WAV, MP3,
+  M4A, and OGG/Opus with local FFmpeg and whisper.cpp, and the approved
+  tiny/base/small benchmark had completed with exact aggregate evidence.
+- Independent measured read-only reviews found and drove fixes for incomplete
+  failed-record backups, stale restored indexed sources, unpinned model
+  downloads, destructive cleanup races, repository-local privacy paths,
+  symlink aliases, orphan managed files, restore count reporting, portability,
+  and staged restore validation. The final review reported no critical or high
+  finding. Raw review evidence remains ignored under `.local/paios-sessions/`.
+- Remote GitHub Actions has not run for the current uncommitted worktree.
+  Phase 1 remains `in-progress` until the complete change is explicitly
+  authorized for commit/push and the resulting workflow run passes. No remote
+  CI success is claimed.
 
 ## Decision Boundaries
 

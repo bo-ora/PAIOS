@@ -21,6 +21,7 @@ const supportedDocumentTypes = new Map([
 
 const missingSourceError = "Indexed source is missing.";
 const invalidSourceError = "Indexed source could not be processed.";
+const changedSourceError = "Indexed source changed since it was recorded.";
 
 interface IndexedRecordRow {
   id: string;
@@ -314,6 +315,94 @@ export function indexRepository(
       throw error;
     }
     return result;
+  } finally {
+    connection.close();
+  }
+}
+
+export function revalidateIndexedSources(dataRoot: string): number {
+  const connection = openKnowledgeDatabase(dataRoot);
+  let stale = 0;
+  try {
+    connection.database.exec("BEGIN IMMEDIATE");
+    try {
+      const rows = connection.database
+        .prepare(`
+          SELECT source_reference, checksum
+          FROM records
+          WHERE source_type = 'indexed-file' AND state = 'ready'
+          ORDER BY source_reference
+        `)
+        .all() as unknown as {
+        source_reference: string;
+        checksum: string;
+      }[];
+      for (const row of rows) {
+        let stats;
+        try {
+          stats = lstatSync(row.source_reference);
+        } catch {
+          markFailed(
+            connection.database,
+            row.source_reference,
+            missingSourceError,
+          );
+          stale += 1;
+          continue;
+        }
+        if (stats.isSymbolicLink() || !stats.isFile()) {
+          markFailed(
+            connection.database,
+            row.source_reference,
+            invalidSourceError,
+          );
+          stale += 1;
+          continue;
+        }
+        let bytes: Buffer;
+        try {
+          bytes = readFileSync(row.source_reference);
+        } catch {
+          markFailed(
+            connection.database,
+            row.source_reference,
+            invalidSourceError,
+          );
+          stale += 1;
+          continue;
+        }
+        try {
+          const mediaType = supportedDocumentTypes.get(
+            extname(row.source_reference).toLowerCase(),
+          );
+          const normalizedText = normalizeText(decodeUtf8(bytes));
+          if (mediaType === undefined || normalizedText.trim().length === 0) {
+            throw new KnowledgeInputError("Invalid indexed source.");
+          }
+        } catch {
+          markFailed(
+            connection.database,
+            row.source_reference,
+            invalidSourceError,
+          );
+          stale += 1;
+          continue;
+        }
+        if (checksum(bytes) !== row.checksum) {
+          markFailed(
+            connection.database,
+            row.source_reference,
+            changedSourceError,
+          );
+          stale += 1;
+        }
+      }
+      connection.database.exec("COMMIT");
+    } catch (error) {
+      connection.database.exec("ROLLBACK");
+      throw error;
+    }
+    return stale;
   } finally {
     connection.close();
   }

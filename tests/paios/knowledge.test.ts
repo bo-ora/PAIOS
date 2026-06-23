@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -7,6 +8,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -15,7 +17,17 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, test } from "node:test";
 
-import { runCli, type CliContext, type CliIo } from "../../src/paios/cli.js";
+import {
+  runCli as runCliAsync,
+  runCliSync as runCli,
+  type CliContext,
+  type CliIo,
+} from "../../src/paios/cli.js";
+import {
+  createKnowledgeBackup,
+  KnowledgeBackupError,
+  restoreKnowledgeBackup,
+} from "../../src/paios/knowledge/backup.js";
 import {
   collectAudioDiagnostics,
 } from "../../src/paios/knowledge/audio-diagnostics.js";
@@ -35,8 +47,10 @@ import {
   type KnowledgeCommand,
 } from "../../src/paios/knowledge/commands.js";
 import {
+  assertPrivateRepositoryPath,
   ffmpegPathEnvironment,
   knowledgeDataRootEnvironment,
+  KnowledgeConfigurationError,
   resolveAudioToolConfiguration,
   resolveKnowledgeDataRoot,
   whisperCliPathEnvironment,
@@ -56,6 +70,7 @@ import {
 } from "../../src/paios/knowledge/records.js";
 import { indexRepository } from "../../src/paios/knowledge/repository-index.js";
 import {
+  completeAudioProcessing,
   listProcessingAttempts,
   recordProcessingAttempt,
 } from "../../src/paios/knowledge/processing-attempts.js";
@@ -111,6 +126,15 @@ test("knowledge command parser covers the approved command namespace", () => {
     [["ingest-inbox"], { name: "ingest-inbox" }],
     [["search", "\"exact phrase\""], { name: "search", query: "\"exact phrase\"" }],
     [["rebuild"], { name: "rebuild" }],
+    [["backup", "backup-package"], {
+      name: "backup",
+      destination: "backup-package",
+    }],
+    [["restore", "backup-package", "--data-root", "restored"], {
+      name: "restore",
+      backup: "backup-package",
+      dataRoot: "restored",
+    }],
   ];
 
   for (const [args, expected] of cases) {
@@ -122,6 +146,7 @@ test("knowledge command parser covers the approved command namespace", () => {
   );
   assert.equal(parseKnowledgeCommand(["add-note", "--title"]), null);
   assert.equal(parseKnowledgeCommand(["doctor", "--data-root", "custom"]), null);
+  assert.equal(parseKnowledgeCommand(["restore", "backup-package"]), null);
   assert.equal(parseKnowledgeCommand(["search"]), null);
   assert.equal(parseKnowledgeCommand(["unknown"]), null);
 });
@@ -290,6 +315,60 @@ test("data root precedence is command, environment, then local default", () => {
   assert.equal(
     resolveKnowledgeDataRoot({ repositoryRoot: root }),
     join(root, ".local", "paios", "knowledge"),
+  );
+});
+
+test("repository-local personal-data paths must be ignored by Git", () => {
+  const root = temporaryRoot();
+  assert.equal(spawnSync("git", ["init", "-q"], { cwd: root }).status, 0);
+  writeFileSync(join(root, ".gitignore"), ".local/\nprivate-backups/\n");
+
+  assert.doesNotThrow(() =>
+    assertPrivateRepositoryPath(
+      root,
+      join(root, ".local", "knowledge"),
+      "Knowledge data root",
+    ),
+  );
+  assert.doesNotThrow(() =>
+    assertPrivateRepositoryPath(
+      root,
+      join(root, "private-backups", "snapshot"),
+      "Backup destination",
+    ),
+  );
+  assert.throws(
+    () =>
+      assertPrivateRepositoryPath(
+        root,
+        join(root, "knowledge-data"),
+        "Knowledge data root",
+      ),
+    KnowledgeConfigurationError,
+  );
+  assert.throws(
+    () =>
+      assertPrivateRepositoryPath(
+        root,
+        join(root, "backup-copy"),
+        "Backup destination",
+      ),
+    KnowledgeConfigurationError,
+  );
+
+  const unignoredTarget = join(root, "unignored-target");
+  mkdirSync(unignoredTarget);
+  const externalRoot = temporaryRoot();
+  const externalAlias = join(externalRoot, "repository-alias");
+  symlinkSync(unignoredTarget, externalAlias);
+  assert.throws(
+    () =>
+      assertPrivateRepositoryPath(
+        root,
+        join(externalAlias, "knowledge"),
+        "Knowledge data root",
+      ),
+    KnowledgeConfigurationError,
   );
 });
 
@@ -535,6 +614,301 @@ function canonicalWavFixture(): Buffer {
   bytes.writeUInt16LE(16, 34);
   return bytes;
 }
+
+function wavFixtureWithSample(sample: number): Buffer {
+  const bytes = Buffer.alloc(46);
+  wavFixture().copy(bytes);
+  bytes.writeUInt32LE(38, 4);
+  bytes.writeUInt32LE(2, 40);
+  bytes.writeInt16LE(sample, 44);
+  return bytes;
+}
+
+test("backup and restore recover records, transcripts, sources, and search after restart", async () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const backupRoot = join(root, "backup");
+  const restoredRoot = join(root, "restored");
+  const importedPath = join(root, "reference.md");
+  const audioPath = join(root, "voice.wav");
+  const failedAudioPath = join(root, "failed.wav");
+  const pendingAudioPath = join(root, "pending.wav");
+  const indexedRoot = join(root, "indexed");
+  writeFileSync(importedPath, "# Reference\nportable recovery evidence\n");
+  writeFileSync(audioPath, wavFixture());
+  writeFileSync(failedAudioPath, wavFixtureWithSample(1));
+  writeFileSync(pendingAudioPath, wavFixtureWithSample(2));
+  mkdirSync(indexedRoot);
+  writeFileSync(
+    join(indexedRoot, "repository.md"),
+    "# Repository\nindexed recovery evidence\n",
+  );
+
+  const note = addNote(dataRoot, {
+    title: "Recovery note",
+    content: "restart-safe knowledge",
+  });
+  const imported = addFile(dataRoot, importedPath);
+  const audio = addAudio(dataRoot, audioPath);
+  const failedAudio = addAudio(dataRoot, failedAudioPath);
+  const pendingAudio = addAudio(dataRoot, pendingAudioPath);
+  assert.equal(indexRepository(dataRoot, indexedRoot).indexed, 1);
+  const indexed = searchRecords(dataRoot, "indexed recovery")[0];
+  assert.notEqual(indexed, undefined);
+  completeAudioProcessing(dataRoot, {
+    recordId: audio.id,
+    implementationVersion: "whisper.cpp test",
+    modelFilename: "ggml-base.bin",
+    modelChecksum: "a".repeat(64),
+    language: "en",
+    startedAt: "2026-06-23T08:00:00.000Z",
+    completedAt: "2026-06-23T08:00:01.000Z",
+    status: "succeeded",
+    exitStatus: 0,
+    diagnostic: null,
+    transcript: "searchable restored transcript",
+  });
+  completeAudioProcessing(dataRoot, {
+    recordId: failedAudio.id,
+    implementationVersion: "whisper.cpp test",
+    modelFilename: "ggml-base.bin",
+    modelChecksum: "b".repeat(64),
+    language: "en",
+    startedAt: "2026-06-23T08:01:00.000Z",
+    completedAt: "2026-06-23T08:01:01.000Z",
+    status: "failed",
+    exitStatus: 1,
+    diagnostic: "synthetic failure",
+    transcript: null,
+    errorMessage: "Synthetic transcription failure.",
+  });
+
+  const created = await createKnowledgeBackup(dataRoot, backupRoot);
+  assert.equal(created.fileCount, 6);
+  assert.ok(existsSync(join(backupRoot, "manifest.json")));
+  assert.equal(statSync(backupRoot).mode & 0o777, 0o700);
+  assert.equal(
+    statSync(join(backupRoot, "knowledge.sqlite")).mode & 0o777,
+    0o600,
+  );
+  assert.equal(
+    statSync(join(backupRoot, note.sourceReference)).mode & 0o777,
+    0o600,
+  );
+
+  const restored = restoreKnowledgeBackup(backupRoot, restoredRoot);
+  assert.equal(restored.recordCount, 6);
+  assert.equal(restored.indexedRecordCount, 4);
+  assert.equal(restored.staleIndexedRecordCount, 0);
+  assert.equal(restored.fileCount, 6);
+  assert.equal(statSync(restoredRoot).mode & 0o777, 0o700);
+  assert.deepEqual(getRecord(restoredRoot, note.id), getRecord(dataRoot, note.id));
+  assert.deepEqual(
+    getRecord(restoredRoot, imported.id),
+    getRecord(dataRoot, imported.id),
+  );
+  assert.deepEqual(
+    getRecord(restoredRoot, audio.id),
+    getRecord(dataRoot, audio.id),
+  );
+  assert.deepEqual(
+    getRecord(restoredRoot, failedAudio.id),
+    getRecord(dataRoot, failedAudio.id),
+  );
+  assert.deepEqual(
+    getRecord(restoredRoot, pendingAudio.id),
+    getRecord(dataRoot, pendingAudio.id),
+  );
+  assert.deepEqual(
+    getRecord(restoredRoot, indexed?.recordId ?? ""),
+    getRecord(dataRoot, indexed?.recordId ?? ""),
+  );
+  assert.deepEqual(
+    listProcessingAttempts(restoredRoot, audio.id),
+    listProcessingAttempts(dataRoot, audio.id),
+  );
+  assert.deepEqual(
+    listProcessingAttempts(restoredRoot, failedAudio.id),
+    listProcessingAttempts(dataRoot, failedAudio.id),
+  );
+  assert.equal(
+    searchRecords(restoredRoot, "\"restart-safe\"")[0]?.recordId,
+    note.id,
+  );
+  assert.equal(
+    searchRecords(restoredRoot, "restored transcript")[0]?.recordId,
+    audio.id,
+  );
+  assert.equal(
+    searchRecords(restoredRoot, "indexed recovery")[0]?.recordId,
+    indexed?.recordId,
+  );
+  assert.deepEqual(
+    readFileSync(join(restoredRoot, imported.sourceReference)),
+    readFileSync(join(dataRoot, imported.sourceReference)),
+  );
+});
+
+test("restore validates checksums before touching an empty destination", async () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const backupRoot = join(root, "backup");
+  const restoredRoot = join(root, "restored");
+  const record = addNote(dataRoot, { content: "tamper evidence" });
+  await createKnowledgeBackup(dataRoot, backupRoot);
+  mkdirSync(restoredRoot);
+  writeFileSync(
+    join(backupRoot, record.sourceReference),
+    "modified after backup",
+  );
+
+  assert.throws(
+    () => restoreKnowledgeBackup(backupRoot, restoredRoot),
+    (error: unknown) =>
+      error instanceof KnowledgeBackupError &&
+      error.message.includes("checksum validation failed"),
+  );
+  assert.deepEqual(readdirSync(restoredRoot), []);
+});
+
+test("backup rejects a ready record whose managed source is missing", async () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const backupRoot = join(root, "backup");
+  const record = addNote(dataRoot, { content: "required source" });
+  rmSync(join(dataRoot, record.sourceReference));
+
+  await assert.rejects(
+    createKnowledgeBackup(dataRoot, backupRoot),
+    (error: unknown) =>
+      error instanceof KnowledgeBackupError &&
+      error.message.includes("missing a required managed source"),
+  );
+  assert.equal(existsSync(backupRoot), false);
+});
+
+test("backup rejects a failed record whose managed source was never written", async () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const backupRoot = join(root, "backup");
+  mkdirSync(dataRoot);
+  writeFileSync(join(dataRoot, "sources"), "blocks the source directory");
+  assert.throws(() => addNote(dataRoot, { content: "failed source" }));
+  rmSync(join(dataRoot, "sources"));
+
+  await assert.rejects(
+    createKnowledgeBackup(dataRoot, backupRoot),
+    (error: unknown) =>
+      error instanceof KnowledgeBackupError &&
+      error.message.includes("missing a required managed source"),
+  );
+  assert.equal(existsSync(backupRoot), false);
+});
+
+test("backup rejects unreferenced files under managed source storage", async () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const backupRoot = join(root, "backup");
+  addNote(dataRoot, { content: "referenced source" });
+  const orphan = join(dataRoot, "sources", "notes", "orphan.txt");
+  writeFileSync(orphan, "unreferenced personal bytes");
+
+  await assert.rejects(
+    createKnowledgeBackup(dataRoot, backupRoot),
+    (error: unknown) =>
+      error instanceof KnowledgeBackupError &&
+      error.message.includes("unreferenced managed source"),
+  );
+  assert.equal(existsSync(backupRoot), false);
+});
+
+test("backup rejects a destination aliased inside the data root", async () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  addNote(dataRoot, { content: "path separation" });
+  const alias = join(root, "knowledge-alias");
+  symlinkSync(dataRoot, alias);
+
+  await assert.rejects(
+    createKnowledgeBackup(dataRoot, join(alias, "backup")),
+    (error: unknown) =>
+      error instanceof KnowledgeBackupError &&
+      error.message.includes("outside the knowledge data root"),
+  );
+});
+
+test("restore marks unavailable indexed sources stale before rebuilding search", async () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const backupRoot = join(root, "backup");
+  const restoredRoot = join(root, "restored");
+  const indexedRoot = join(root, "indexed");
+  mkdirSync(indexedRoot);
+  const indexedPath = join(indexedRoot, "external.md");
+  writeFileSync(indexedPath, "# External\nsource must remain inspectable\n");
+  assert.equal(indexRepository(dataRoot, indexedRoot).indexed, 1);
+  const recordId = searchRecords(dataRoot, "remain inspectable")[0]?.recordId;
+  assert.notEqual(recordId, undefined);
+  await createKnowledgeBackup(dataRoot, backupRoot);
+  rmSync(indexedPath);
+
+  const restored = restoreKnowledgeBackup(backupRoot, restoredRoot);
+
+  assert.equal(restored.recordCount, 1);
+  assert.equal(restored.indexedRecordCount, 0);
+  assert.equal(restored.staleIndexedRecordCount, 1);
+  assert.equal(getRecord(restoredRoot, recordId ?? "")?.state, "failed");
+  assert.equal(searchRecords(restoredRoot, "remain inspectable").length, 0);
+});
+
+test("CLI backup and restore require and use an explicit restore data root", async () => {
+  const root = temporaryRoot();
+  const dataRoot = join(root, "knowledge");
+  const backupRoot = join(root, "backup");
+  const restoredRoot = join(root, "restored");
+  addNote(dataRoot, { content: "CLI recovery" });
+
+  const backupCapture = capture();
+  assert.equal(
+    await runCliAsync(
+      ["knowledge", "backup", backupRoot, "--data-root", dataRoot],
+      root,
+      backupCapture.io,
+    ),
+    0,
+  );
+  assert.match(backupCapture.stdout.join(""), /Created knowledge backup/);
+
+  const missingDestination = capture();
+  assert.equal(
+    await runCliAsync(
+      ["knowledge", "restore", backupRoot],
+      root,
+      missingDestination.io,
+    ),
+    2,
+  );
+
+  const restoreCapture = capture();
+  assert.equal(
+    await runCliAsync(
+      [
+        "knowledge",
+        "restore",
+        backupRoot,
+        "--data-root",
+        restoredRoot,
+      ],
+      root,
+      restoreCapture.io,
+    ),
+    0,
+  );
+  assert.equal(searchRecords(restoredRoot, "recovery").length, 1);
+  assert.match(restoreCapture.stdout.join(""), /Restored 1 knowledge record/);
+  assert.match(restoreCapture.stdout.join(""), /Indexed: 1 ready record/);
+  assert.match(restoreCapture.stdout.join(""), /Stale indexed sources: 0/);
+});
 
 function normalizationInput(): {
   bytes: Buffer;

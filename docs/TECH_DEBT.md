@@ -1,7 +1,7 @@
 # Technical Debt Register
 
 Status: Active  
-Last reviewed: 2026-06-22
+Last reviewed: 2026-06-23
 
 This register tracks deliberate shortcuts, maintainability risks, and deferred
 quality work. Planned features are not technical debt unless an existing
@@ -21,7 +21,7 @@ implementation creates a concrete future cost or risk.
 | ID | Area | Severity | Status | Debt and impact | Repayment trigger | Target |
 | --- | --- | --- | --- | --- | --- | --- |
 | TD-001 | Tooling | `low` | `accepted` | Bootstrap validation and Codex capture utilities are Python while TypeScript is the preferred application language. Maintaining two languages adds minor setup and cognitive cost. | A Python utility needs substantial feature work, shared models with the TypeScript CLI, or causes onboarding friction. | Reassessed at Phase 1 approval; retain until the trigger occurs. |
-| TD-002 | Delivery | `medium` | `accepted` | Work currently commits directly to `master`, reducing independent review and rollback isolation. This is intentional for single-user bootstrap speed. | Parallel development begins, external contributors join, or a change introduces operational, migration, or personal-data risk that warrants isolated review. | Reassessed at Phase 1 approval; retain while work is single-user and reversible. |
+| TD-002 | Delivery | `medium` | `open` | Work currently commits directly to `master`, reducing independent review and rollback isolation. Phase 1 recovery and personal-data changes required repeated independent review, so the original repayment trigger has occurred. | Trigger met during Phase 1 backup/restore acceptance. | Introduce branch/PR delivery before Phase 2 implementation or the next operational, migration, or personal-data change. |
 | TD-003 | Automation | `low` | `resolved` | Repository tests and knowledge validation were local-only, allowing broken code or documents to be pushed unnoticed. GitHub Actions now enforces lint, typecheck, tests, build, CLI smoke checks, Python tests, repository validation, and whitespace checks. | Trigger met when the first executable CLI and stable validation commands existed. | Resolved in Phase 0 by commits `0f00730` and `f67d459`; CI runs `27936321778` and `27936349931` passed. |
 | TD-004 | Roadmap | `low` | `accepted` | Mermaid phase labels duplicate the authoritative phase table and can drift. | A drift occurs, phase count grows materially, or the status CLI needs structured roadmap parsing beyond the agreed table format. | Reassessed at Phase 1 approval; retain until the trigger occurs. |
 

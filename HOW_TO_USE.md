@@ -233,6 +233,44 @@ Without the opt-in variable or required local paths, the harness reports a
 clear skip. Invalid language or timeout values fail with a configuration error.
 This harness does not run the separate `tiny`, `base`, and `small` benchmark.
 
+## Run the Opt-In Fixed-Sample Audio Benchmark
+
+The fixed-sample benchmark is separate from normal tests and the real-format
+integration harness. It is disabled unless explicitly enabled:
+
+```bash
+PAIOS_RUN_AUDIO_BENCHMARK=1 npm run benchmark:audio
+```
+
+The benchmark requires local `ffmpeg`, `whisper-cli`, `/usr/bin/say`,
+`/usr/bin/time`, and `curl`. It generates the approved non-sensitive English
+fixture with the macOS Samantha voice, normalizes it once to canonical 16 kHz
+mono signed 16-bit PCM WAV, and temporarily downloads the official whisper.cpp
+multilingual `ggml-tiny.bin`, `ggml-base.bin`, and `ggml-small.bin` models from
+a pinned repository revision. Each model's approved byte length and SHA-256
+checksum are verified before `whisper-cli` processes it.
+
+For each model it runs one unmeasured warm-up followed by three sequential
+measured transcriptions with language `en` and identical arguments. The report
+includes tool versions, model byte lengths and SHA-256 checksums, fixture
+duration and reference sentence, each wall time, median wall time, real-time
+factor, maximum measured peak resident memory, normalized transcript, and word
+error rate.
+
+Optional configuration:
+
+- `PAIOS_AUDIO_BENCHMARK_TIMEOUT_MS` sets the positive per-subprocess timeout;
+  the default is `600000`.
+- `PAIOS_AUDIO_BENCHMARK_ROOT` changes the ignored temporary model root; the
+  default is `.local/paios-benchmark`.
+
+The configured benchmark root must be outside the repository or ignored by
+Git, and it must not already exist. The harness uses shell-free subprocesses
+and removes only its known downloaded models, generated audio, transcripts,
+and runtime directories after success or failure. Keep only a non-sensitive
+aggregate report. Running the benchmark does not change the documented
+production default model.
+
 ## Rebuild the Search Index
 
 Recreate the derived FTS5 index from durable SQLite records:
@@ -242,6 +280,51 @@ Recreate the derived FTS5 index from durable SQLite records:
 ```
 
 Rebuild does not rewrite managed source files or record identifiers.
+
+## Back Up and Restore Local Knowledge
+
+Create a portable backup package outside the active knowledge data root:
+
+```bash
+./paios knowledge backup "$HOME/backups/paios-knowledge-2026-06-23"
+```
+
+Use `--data-root` or `PAIOS_DATA_ROOT` when backing up a non-default data root.
+The destination must not already exist. PAIOS builds the package in a private
+sibling staging directory and publishes it atomically. The package contains a
+consistent SQLite snapshot, every managed source file, and `manifest.json`
+with each file's byte length and SHA-256 checksum. Transcripts and processing
+metadata are included in the SQLite snapshot. Indexed external files are not
+copied because their original paths remain authoritative.
+
+Restore into an explicitly selected empty data root:
+
+```bash
+mkdir "$HOME/.local/share/paios-restored"
+./paios knowledge restore \
+  "$HOME/backups/paios-knowledge-2026-06-23" \
+  --data-root "$HOME/.local/share/paios-restored"
+```
+
+Restore validates the manifest, rejects missing, extra, modified, or unsafe
+package paths before copying files, opens the restored database, and rebuilds
+the derived search index. It never merges into an existing data root. If
+activation fails, the partially restored destination is removed.
+
+After a restore, point `PAIOS_DATA_ROOT` at the restored directory and verify a
+known record and query:
+
+```bash
+export PAIOS_DATA_ROOT="$HOME/.local/share/paios-restored"
+./paios knowledge show RECORD_ID
+./paios knowledge search '"known phrase"'
+```
+
+Keep backup packages on storage appropriate for personal data. Phase 1 does not
+encrypt backups or manage retention. A checksum failure means the package is
+damaged or modified; retain the empty destination, select another backup, and
+run restore again. If only search behavior is incorrect while records remain
+readable, run `./paios knowledge rebuild`.
 
 ## Use an Isolated Data Directory
 
@@ -276,14 +359,15 @@ npm run lint
 npm run typecheck
 npm test
 npm run test:audio-integration  # optional; requires the configuration above
+npm run benchmark:audio         # optional; requires explicit opt-in
 npm run build
 python3 -m unittest discover -s tests -v
 python3 scripts/validate_repository.py .
 git diff --check
 ```
 
-## Not Implemented Yet
+## Delivery Status
 
-The fixed-sample `tiny`, `base`, and `small` transcription benchmark,
-backup/restore workflow, and remaining Phase 1 acceptance review are not yet
-implemented.
+Phase 1 implementation and local acceptance are complete. The phase remains
+`in-progress` until the current uncommitted change is explicitly authorized for
+commit/push and GitHub Actions passes it.

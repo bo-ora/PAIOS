@@ -58,7 +58,18 @@ jobs:
           ./paios knowledge add-file "$data_root/input.txt" --data-root "$data_root"
           ./paios knowledge search '"imported document"' --data-root "$data_root"
           ./paios knowledge rebuild --data-root "$data_root"
-          rm -rf "$data_root"
+          indexed_root=$(mktemp -d)
+          printf '%s\n' "CI indexed external document" > "$indexed_root/external.md"
+          ./paios knowledge index "$indexed_root" --data-root "$data_root"
+          backup_parent=$(mktemp -d)
+          backup_root="$backup_parent/knowledge-backup"
+          restored_root=$(mktemp -d)
+          ./paios knowledge backup "$backup_root" --data-root "$data_root"
+          rm -rf "$indexed_root"
+          ./paios knowledge restore "$backup_root" --data-root "$restored_root"
+          ./paios knowledge search '"imported document"' --data-root "$restored_root"
+          test "$(./paios knowledge search '"indexed external"' --data-root "$restored_root")" = "No matching knowledge records."
+          rm -rf "$data_root" "$backup_parent" "$restored_root"
 
       - name: Test Python tooling
         run: python3 -m unittest discover -s tests -v

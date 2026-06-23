@@ -12,7 +12,9 @@ export type KnowledgeCommand =
   | { name: "index"; path: string; dataRoot?: string }
   | { name: "ingest-inbox"; dataRoot?: string }
   | { name: "search"; query: string; dataRoot?: string }
-  | { name: "rebuild"; dataRoot?: string };
+  | { name: "rebuild"; dataRoot?: string }
+  | { name: "backup"; destination: string; dataRoot?: string }
+  | { name: "restore"; backup: string; dataRoot: string };
 
 export const knowledgeUsage =
   "Usage:\n" +
@@ -24,7 +26,9 @@ export const knowledgeUsage =
   "  ./paios knowledge index PATH [--data-root PATH]\n" +
   "  ./paios knowledge ingest-inbox [--data-root PATH]\n" +
   "  ./paios knowledge search QUERY [--data-root PATH]\n" +
-  "  ./paios knowledge rebuild [--data-root PATH]\n";
+  "  ./paios knowledge rebuild [--data-root PATH]\n" +
+  "  ./paios knowledge backup DESTINATION [--data-root PATH]\n" +
+  "  ./paios knowledge restore BACKUP --data-root EMPTY_DESTINATION\n";
 
 function extractOption(
   args: string[],
@@ -89,6 +93,24 @@ export function parseKnowledgeCommand(args: string[]): KnowledgeCommand | null {
 
   if (name === "ingest-inbox" || name === "rebuild") {
     return configured.args.length === 0 ? { name, ...dataRoot } : null;
+  }
+
+  if (name === "backup") {
+    return configured.args.length === 1 && configured.args[0] !== undefined
+      ? { name, destination: configured.args[0], ...dataRoot }
+      : null;
+  }
+
+  if (name === "restore") {
+    return configured.args.length === 1 &&
+      configured.args[0] !== undefined &&
+      configured.dataRoot !== undefined
+      ? {
+          name,
+          backup: configured.args[0],
+          dataRoot: configured.dataRoot,
+        }
+      : null;
   }
 
   if (

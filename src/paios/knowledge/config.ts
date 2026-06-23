@@ -1,9 +1,35 @@
-import { isAbsolute, join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import {
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
+import { existsSync, realpathSync } from "node:fs";
 
 export const knowledgeDataRootEnvironment = "PAIOS_DATA_ROOT";
 export const ffmpegPathEnvironment = "PAIOS_FFMPEG_PATH";
 export const whisperCliPathEnvironment = "PAIOS_WHISPER_CLI_PATH";
 export const whisperModelPathEnvironment = "PAIOS_WHISPER_MODEL_PATH";
+
+export class KnowledgeConfigurationError extends Error {}
+
+function canonicalConfiguredPath(path: string): string {
+  const resolved = resolve(path);
+  if (existsSync(resolved)) {
+    return realpathSync(resolved);
+  }
+  const parent = dirname(resolved);
+  if (parent === resolved) {
+    return resolved;
+  }
+  return join(
+    canonicalConfiguredPath(parent),
+    resolved.slice(parent.length + 1),
+  );
+}
 
 export interface KnowledgeConfigurationInput {
   repositoryRoot: string;
@@ -25,6 +51,46 @@ export function resolveKnowledgeDataRoot(
     return resolveConfiguredPath(input.repositoryRoot, input.environmentDataRoot);
   }
   return join(input.repositoryRoot, ".local", "paios", "knowledge");
+}
+
+export function assertPrivateRepositoryPath(
+  repositoryRoot: string,
+  path: string,
+  description: string,
+): void {
+  const root = canonicalConfiguredPath(repositoryRoot);
+  const configuredTarget = isAbsolute(path) ? path : resolve(root, path);
+  const target = canonicalConfiguredPath(configuredTarget);
+  const repositoryRelative = relative(root, target);
+  if (
+    repositoryRelative === ".." ||
+    repositoryRelative.startsWith(`..${sep}`)
+  ) {
+    return;
+  }
+  const worktree = spawnSync(
+    "git",
+    ["rev-parse", "--is-inside-work-tree"],
+    { cwd: root, encoding: "utf8" },
+  );
+  if (worktree.status !== 0 || worktree.stdout.trim() !== "true") {
+    return;
+  }
+  if (repositoryRelative.length === 0) {
+    throw new KnowledgeConfigurationError(
+      `${description} must not be the repository root.`,
+    );
+  }
+  const ignored = spawnSync(
+    "git",
+    ["check-ignore", "--quiet", "--", repositoryRelative],
+    { cwd: root, encoding: "utf8" },
+  );
+  if (ignored.status !== 0) {
+    throw new KnowledgeConfigurationError(
+      `${description} inside the repository must be ignored by Git.`,
+    );
+  }
 }
 
 export interface AudioToolConfiguration {
