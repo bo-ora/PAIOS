@@ -37,6 +37,17 @@ import {
 import { indexRepository } from "./knowledge/repository-index.js";
 import { assertKnowledgeRuntime } from "./knowledge/runtime.js";
 import { collectStatus } from "./status.js";
+import type { FetchLike } from "./http-fetch.js";
+import {
+  resolveSynthesisConfig,
+  resolveTelegramConfig,
+  TelegramConfigError,
+} from "./telegram/config.js";
+import { collectTelegramDiagnostics } from "./telegram/doctor.js";
+import { createFileCursorStore } from "./telegram/cursor-store.js";
+import { createTelegramProvider } from "./telegram/telegram-provider.js";
+import { createOllamaProvider } from "./synthesis/ollama-provider.js";
+import { runAssistant, type AssistantDeps } from "./telegram/assistant.js";
 import type {
   KnowledgeRecord,
   KnowledgeSearchResult,
@@ -50,6 +61,7 @@ export interface CliIo {
 export interface CliContext {
   environment: Readonly<Record<string, string | undefined>>;
   stdin: () => string;
+  fetch?: FetchLike;
 }
 
 const statusUsage = "Usage: ./paios status [--json]\n";
@@ -346,6 +358,120 @@ function runKnowledge(
   }
 }
 
+const telegramUsage = `Usage:
+  ./paios telegram doctor
+  ./paios telegram serve
+`;
+
+function resolvedFetch(context: CliContext): FetchLike {
+  return context.fetch ?? globalThis.fetch;
+}
+
+function audioOptionsIfReady(
+  root: string,
+  context: CliContext,
+  dataRoot: string,
+): AssistantDeps["audio"] {
+  const configuration = resolveAudioToolConfiguration(
+    root,
+    context.environment,
+  );
+  const diagnostics = collectAudioDiagnostics(configuration);
+  if (
+    !diagnostics.ready ||
+    diagnostics.whisperCli.version === null ||
+    configuration.whisperModelPath === null
+  ) {
+    return undefined;
+  }
+  const temporaryRoot = join(dataRoot, "temporary");
+  return {
+    normalizer: {
+      ffmpegCommand: configuration.ffmpeg.command,
+      temporaryRoot,
+    },
+    transcriber: {
+      whisperCommand: configuration.whisperCli.command,
+      whisperVersion: diagnostics.whisperCli.version,
+      modelPath: configuration.whisperModelPath,
+      temporaryRoot,
+    },
+  };
+}
+
+async function runTelegram(
+  args: string[],
+  root: string,
+  io: CliIo,
+  context: CliContext,
+): Promise<number> {
+  const subcommand = args[0];
+
+  if (subcommand === "doctor") {
+    const diagnostics = await collectTelegramDiagnostics(
+      context.environment,
+      resolvedFetch(context),
+    );
+    io.stdout(
+      ["PAIOS Telegram diagnostics", ...diagnostics.summary, ""].join("\n"),
+    );
+    return diagnostics.ready ? 0 : 1;
+  }
+
+  if (subcommand === "serve") {
+    let telegramConfig;
+    try {
+      telegramConfig = resolveTelegramConfig(context.environment);
+    } catch (error) {
+      if (error instanceof TelegramConfigError) {
+        io.stderr(`${error.message}\n`);
+        return 2;
+      }
+      throw error;
+    }
+    const synthesisConfig = resolveSynthesisConfig(context.environment);
+    const dataRoot = resolveKnowledgeDataRoot({
+      repositoryRoot: root,
+      ...(context.environment[knowledgeDataRootEnvironment] === undefined
+        ? {}
+        : {
+            environmentDataRoot:
+              context.environment[knowledgeDataRootEnvironment],
+          }),
+    });
+    assertPrivateRepositoryPath(root, dataRoot, "Knowledge data root");
+    const fetchImpl = resolvedFetch(context);
+    const audio = audioOptionsIfReady(root, context, dataRoot);
+    const deps: AssistantDeps = {
+      dataRoot,
+      tempRoot: join(dataRoot, "temporary"),
+      provider: createTelegramProvider({
+        config: telegramConfig,
+        cursorStore: createFileCursorStore(dataRoot),
+        fetch: fetchImpl,
+      }),
+      synthesis: createOllamaProvider({
+        config: synthesisConfig,
+        fetch: fetchImpl,
+      }),
+      ...(audio === undefined ? {} : { audio }),
+      log: (event) => {
+        io.stdout(
+          `telegram ${event.event} ${event.workspace} ${event.outcome}\n`,
+        );
+      },
+    };
+    io.stdout(
+      `PAIOS Telegram assistant serving ${telegramConfig.allowedChatIds.size} workspace(s) with model ${synthesisConfig.model}.\n`,
+    );
+    await runAssistant(deps);
+    return 0;
+  }
+
+  io.stderr(telegramUsage);
+  return 2;
+}
+
 const defaultContext: CliContext = {
   environment: {},
   stdin: () => "",
@@ -373,6 +499,9 @@ export async function runCli(
   io: CliIo,
   context: CliContext = defaultContext,
 ): Promise<number> {
+  if (args[0] === "telegram") {
+    return runTelegram(args.slice(1), root, io, context);
+  }
   if (
     args[0] !== "knowledge" ||
     (args[1] !== "backup" && args[1] !== "restore")

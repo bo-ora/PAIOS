@@ -4,13 +4,37 @@ import { copyFileSync, chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 
-import { runCliSync as runCli } from "../../src/paios/cli.js";
+import {
+  runCli as runCliAsync,
+  runCliSync as runCli,
+} from "../../src/paios/cli.js";
 import { formatHuman } from "../../src/paios/format.js";
+import type { FetchLike } from "../../src/paios/http-fetch.js";
 import type { ProjectStatus } from "../../src/paios/types.js";
 import {
   createRepositoryFixture,
   type RepositoryFixture,
 } from "./fixtures.js";
+
+function tagsFetch(models: string[]): FetchLike {
+  return (url) => {
+    if (url.includes("/api/tags")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({ models: models.map((name) => ({ name })) }),
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      });
+    }
+    return Promise.resolve({
+      ok: false,
+      status: 404,
+      json: () => Promise.resolve({}),
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    });
+  };
+}
 
 let fixtures: RepositoryFixture[] = [];
 
@@ -192,3 +216,54 @@ function execFile(command: string, args: string[], root: string): string {
   assert.equal(result.status, 0, result.stderr);
   return result.stdout;
 }
+
+test("telegram doctor reports ready and exits zero when configured", async () => {
+  const { root } = fixture();
+  const captured = captureIo();
+  const exitCode = await runCliAsync(["telegram", "doctor"], root, captured.io, {
+    environment: {
+      TELEGRAM_BOT_TOKEN: "123:abc",
+      TELEGRAM_ALLOWED_CHAT_IDS: "100",
+      PAIOS_SYNTHESIS_MODEL: "llama3.1:8b",
+    },
+    stdin: () => "",
+    fetch: tagsFetch(["llama3.1:8b"]),
+  });
+  assert.equal(exitCode, 0);
+  assert.match(captured.stdout.join(""), /Assistant: ready/);
+});
+
+test("telegram doctor exits non-zero when the token is missing", async () => {
+  const { root } = fixture();
+  const captured = captureIo();
+  const exitCode = await runCliAsync(["telegram", "doctor"], root, captured.io, {
+    environment: {},
+    stdin: () => "",
+    fetch: tagsFetch([]),
+  });
+  assert.equal(exitCode, 1);
+  assert.match(captured.stdout.join(""), /token: missing/);
+});
+
+test("telegram serve refuses to start without configuration", async () => {
+  const { root } = fixture();
+  const captured = captureIo();
+  const exitCode = await runCliAsync(["telegram", "serve"], root, captured.io, {
+    environment: {},
+    stdin: () => "",
+    fetch: tagsFetch([]),
+  });
+  assert.equal(exitCode, 2);
+  assert.deepEqual(captured.stdout, []);
+});
+
+test("an unknown telegram subcommand prints usage and exits two", async () => {
+  const { root } = fixture();
+  const captured = captureIo();
+  const exitCode = await runCliAsync(["telegram", "wat"], root, captured.io, {
+    environment: {},
+    stdin: () => "",
+    fetch: tagsFetch([]),
+  });
+  assert.equal(exitCode, 2);
+});

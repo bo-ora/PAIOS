@@ -44,6 +44,7 @@ import {
   runAssistantOnce,
   type AssistantDeps,
 } from "../../src/paios/telegram/assistant.js";
+import { collectTelegramDiagnostics } from "../../src/paios/telegram/doctor.js";
 
 const temporaryRoots: string[] = [];
 
@@ -716,4 +717,46 @@ test("runAssistant stops when the control predicate is set", async () => {
     },
   });
   assert.ok(ticks >= 2);
+});
+
+test("collectTelegramDiagnostics reports ready when token, allowlist, and model are present", async () => {
+  const { fetch } = scriptedFetch([
+    {
+      match: "/api/tags",
+      respond: () =>
+        jsonResponse({ models: [{ name: "llama3.1:8b" }, { name: "other" }] }),
+    },
+  ]);
+  const result = await collectTelegramDiagnostics(
+    {
+      TELEGRAM_BOT_TOKEN: "123:abc",
+      TELEGRAM_ALLOWED_CHAT_IDS: "100",
+    },
+    fetch,
+  );
+  assert.equal(result.tokenConfigured, true);
+  assert.equal(result.allowlistCount, 1);
+  assert.equal(result.ollamaReachable, true);
+  assert.equal(result.modelPresent, true);
+  assert.equal(result.ready, true);
+});
+
+test("collectTelegramDiagnostics is not ready without a token or a pulled model", async () => {
+  const { fetch } = scriptedFetch([
+    { match: "/api/tags", respond: () => jsonResponse({ models: [] }) },
+  ]);
+  const noToken = await collectTelegramDiagnostics({}, fetch);
+  assert.equal(noToken.tokenConfigured, false);
+  assert.equal(noToken.ready, false);
+
+  const noModel = await collectTelegramDiagnostics(
+    { TELEGRAM_BOT_TOKEN: "123:abc", TELEGRAM_ALLOWED_CHAT_IDS: "100" },
+    fetch,
+  );
+  assert.equal(noModel.ollamaReachable, true);
+  assert.equal(noModel.modelPresent, false);
+  assert.equal(noModel.ready, false);
+
+  // No secret value leaks into the human-readable summary.
+  assert.ok(noModel.summary.every((line) => !line.includes("123:abc")));
 });
