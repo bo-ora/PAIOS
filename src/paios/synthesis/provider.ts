@@ -30,18 +30,34 @@ export interface AnswerSynthesisProvider {
   synthesize(request: SynthesisRequest): Promise<SynthesisResult>;
 }
 
+// Common English function words carry no retrieval signal and, OR-ed together,
+// cause unrelated records to match. Dropping them keeps "no relevant source"
+// questions from spuriously retrieving content.
+const stopwords = new Set([
+  "the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "for", "with",
+  "is", "are", "was", "were", "be", "been", "being", "am",
+  "do", "does", "did", "have", "has", "had",
+  "what", "which", "who", "whom", "whose", "where", "when", "why", "how",
+  "my", "your", "our", "their", "his", "her", "its", "this", "that", "these",
+  "those", "it", "i", "you", "we", "they", "he", "she",
+  "me", "us", "them", "him",
+  "can", "could", "should", "would", "will", "shall", "may", "might", "must",
+  "about", "into", "from", "by", "as", "if", "so", "than", "then",
+]);
+
 /**
  * Convert a natural-language question into a safe FTS5 query: lowercase,
- * extract alphanumeric tokens of length >= 2, dedupe, quote each (so no token
- * is interpreted as an FTS operator), and OR them for recall. Returns the empty
- * string when nothing usable remains; the caller treats that as no sources.
+ * extract alphanumeric tokens of length >= 2, drop common stopwords, dedupe,
+ * quote each (so no token is interpreted as an FTS operator), and OR them for
+ * recall. Returns the empty string when nothing usable remains; the caller
+ * treats that as no sources.
  */
 export function toSearchQuery(question: string): string {
   const tokens = question.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   const seen = new Set<string>();
   const kept: string[] = [];
   for (const token of tokens) {
-    if (token.length < 2 || seen.has(token)) {
+    if (token.length < 2 || stopwords.has(token) || seen.has(token)) {
       continue;
     }
     seen.add(token);
@@ -51,11 +67,12 @@ export function toSearchQuery(question: string): string {
 }
 
 const synthesisSystemPrompt = [
-  "You are a personal knowledge assistant.",
-  "Answer the user's question using ONLY the numbered sources provided.",
+  "You are the user's private personal knowledge assistant.",
+  "The numbered sources are the user's OWN notes that they captured and are asking you to recall for them.",
+  "Answer the user's question directly using ONLY those sources, including any personal details they recorded (names, numbers, dates) — it is their own information, so do not refuse or withhold it.",
   "Cite every claim inline with the source's record id in square brackets, e.g. [<record-id>].",
   "Do not use any knowledge that is not in the sources.",
-  "If the sources do not contain the answer, say plainly that you cannot answer from the stored knowledge — do not guess or invent details.",
+  "If the sources do not contain the answer, say plainly that you cannot find it in their stored knowledge — do not guess or invent details.",
 ].join(" ");
 
 export function buildSynthesisPrompt(request: SynthesisRequest): {

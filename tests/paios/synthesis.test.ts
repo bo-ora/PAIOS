@@ -34,10 +34,14 @@ function fakeChatFetch(
 
 const synthesisConfig = { ollamaHost: "http://127.0.0.1:11434", model: "test-model" };
 
-test("toSearchQuery tokenises to a safe OR query", () => {
+test("toSearchQuery keeps content words and drops common stopwords", () => {
   assert.equal(
     toSearchQuery("What is my passport number?"),
-    '"what" OR "is" OR "my" OR "passport" OR "number"',
+    '"passport" OR "number"',
+  );
+  assert.equal(
+    toSearchQuery("what is the capital of france"),
+    '"capital" OR "france"',
   );
 });
 
@@ -45,8 +49,17 @@ test("toSearchQuery dedupes tokens and drops single characters", () => {
   assert.equal(toSearchQuery("a dog a DOG"), '"dog"');
 });
 
-test("toSearchQuery returns empty string when nothing usable remains", () => {
+test("toSearchQuery returns empty string when only stopwords remain", () => {
   assert.equal(toSearchQuery("?!  a"), "");
+  assert.equal(toSearchQuery("what is the"), "");
+});
+
+test("buildSynthesisPrompt frames sources as the user's own knowledge", () => {
+  const prompt = buildSynthesisPrompt({
+    question: "q",
+    records: [record("r1", "x")],
+  });
+  assert.match(prompt.system, /your|user|own/i);
 });
 
 test("buildSynthesisPrompt embeds every record id and a grounding rule", () => {

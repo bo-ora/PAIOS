@@ -67,8 +67,8 @@ security boundary are approved.
 | FFmpeg | Phase 1 audio normalization | Not installed | Converts WAV, MP3, M4A, and future Telegram OGG/Opus to canonical WAV |
 | `whisper-cli` from `whisper.cpp` | Phase 1 local transcription | Not installed | Requires an explicitly selected local model |
 | Whisper GGML model | Real transcription integration | Not installed | Never download implicitly during capture |
-| Ollama | Phase 2 local answer synthesis | Installed locally (`brew "ollama"`) | Local LLM runtime; the specific small instruct model is pulled with `ollama pull` and recorded in the Phase 2 ADR |
-| Phase 2 synthesis model (Ollama) | Phase 2 ask/answer slice | Not pulled | Never download implicitly; pull the model named in the Phase 2 ADR |
+| Ollama | Phase 2 local answer synthesis | Installed locally (`brew "ollama"`) | Local LLM runtime; the default model is `llama3.1:8b` (ADR-0006), pulled with `ollama pull` |
+| Phase 2 synthesis model (Ollama) | Phase 2 ask/answer slice | Pull `llama3.1:8b` | Never download implicitly; override with `PAIOS_SYNTHESIS_MODEL` |
 | Codex CLI | AI-assisted repository workflow | Installed locally; optional for runtime | Raw session events remain under ignored `.local/` |
 | Docker MCP Toolkit/Catalog | Future connector experiments | Desktop capability installed locally | Not a PAIOS runtime dependency |
 
@@ -88,6 +88,34 @@ the required local GGML model with `PAIOS_WHISPER_MODEL_PATH`; no model is
 selected or downloaded implicitly. Relative configured paths resolve from the
 repository root. Diagnostics report versions and model checksum metadata while
 redacting configured absolute paths.
+
+### Phase 2 Telegram assistant
+
+The bot reaches Telegram by long-polling (no public endpoint) and synthesises
+answers with a local Ollama model; no personal content leaves the machine
+(ADR-0005, ADR-0006). One-time setup and run:
+
+```bash
+# 1. Local secrets (bot token + chat allowlist) — never committed.
+cp .env.example .local/secrets.env   # then edit in real values; chmod 600
+
+# 2. Local synthesis runtime + model.
+ollama serve &                       # if not already running
+ollama pull llama3.1:8b              # the ADR-0006 default
+
+# 3. Check readiness (touches only local Ollama; reads the token, never prints it).
+set -a; . ./.local/secrets.env; set +a
+./paios telegram doctor
+
+# 4. Run the assistant (long-polls until stopped).
+./paios telegram serve
+```
+
+`telegram doctor` reports the token, allowlist size, Ollama reachability, and
+whether the configured model is pulled, and exits non-zero until all are ready.
+Override the runtime with `OLLAMA_HOST` and the model with
+`PAIOS_SYNTHESIS_MODEL`. The long-poll cursor and all captured knowledge live
+under the data root (`PAIOS_DATA_ROOT`, default `.local/paios/knowledge`).
 
 ## Configuration That Must Remain Local
 
