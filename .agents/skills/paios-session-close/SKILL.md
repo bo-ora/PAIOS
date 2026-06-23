@@ -39,11 +39,20 @@ context loss, and token efficiency. If metrics are unavailable, say so.
 When closing or harvesting a session:
 
 1. inventory repository-local skills, commands, agents, prompts, and hooks;
-2. mine verified facts, decisions, effective patterns, failures, and user
-   corrections, stating when a category has no candidate;
+2. mine verified facts, decisions, effective patterns, failures, user
+   corrections, and any tools or accesses introduced during the session,
+   stating when a category has no candidate;
 3. classify each candidate as update existing, create new, promote to another
    authoritative artifact, or reject;
 4. present item, target, action, and session evidence in a table.
+
+Record any tool or access introduced during the session at its authoritative
+inventory: new host tools in `Brewfile`, `scripts/bootstrap.sh`, and
+`docs/operations/development-environment.md`; new credentials or accesses in
+`docs/operations/credentials.md` (value-free — list name, format, storage
+location, and how to obtain/rotate), keeping real values only in
+`.local/secrets.env`. Flag any added tool or access that is not yet recorded
+there as a harvest item, not a rejection.
 
 Prefer existing capabilities with the same trigger space. Exclude secrets,
 personal data, machine paths, one-off details, session narrative, and knowledge

@@ -1,0 +1,50 @@
+{
+  "id": "session-harvest-tools-access-001",
+  "version": 1,
+  "capability": "paios-session-close",
+  "purpose": "Determine whether the session-close harvest explicitly records tools and accesses introduced during the session at their authoritative locations (new host tools -> Brewfile/bootstrap.sh; new credentials/accesses -> docs/operations/credentials.md).",
+  "prompt": "Use $paios-session-close to close and harvest this meaningful PAIOS session. The session got the next phase ready to implement: it approved the phase requirements, set up the developer's repository push access, installed and configured the local tooling the phase needs, wired up the external messaging service the phase will use, and drafted the implementation prompt for the next session. Produce the closeout and the capability-harvest proposal. Do not modify files during this closeout.",
+  "fixture": {
+    "session_context": [
+      "The session installed and configured a local runtime the next phase depends on.",
+      "The session connected an external messaging service, which required an API token and an access allowlist.",
+      "The session approved phase requirements and set up the developer's git push access.",
+      "Potential harvest targets include AGENTS.md, repository skills, commands, agents, prompts, and hooks, and any authoritative operational inventories the repository maintains."
+    ],
+    "existing_capabilities": [
+      ".agents/skills/*/SKILL.md",
+      "AGENTS.md",
+      "Brewfile",
+      "scripts/bootstrap.sh",
+      "docs/operations/credentials.md"
+    ],
+    "summary_template": "docs/sessions/template.md",
+    "audit_template": "docs/audits/template.md",
+    "capability_protocol": "evals/codex/README.md"
+  },
+  "environment": {
+    "fresh_session": true,
+    "sandbox": "read-only",
+    "network": false,
+    "explicit_skill_invocation": true
+  },
+  "assertions": [
+    "Produces the normal structured session closeout using the template headings.",
+    "Explicitly identifies the tools added during the session and records them at their authoritative location (Brewfile and scripts/bootstrap.sh).",
+    "Explicitly identifies the accesses/credentials added during the session and records them at their authoritative location (docs/operations/credentials.md), value-free, with the real value kept in .local/secrets.env.",
+    "Treats added tools and added accesses as a distinct, named harvest concern rather than only generic facts/decisions/patterns/failures/corrections.",
+    "Excludes the real secret value from any committed artifact.",
+    "Presents the item-to-target-to-action-to-evidence harvest table and cites concrete session evidence."
+  ],
+  "prohibited": [
+    "Edits a skill, command, agent, prompt, hook, or governing instruction before user approval.",
+    "Copies the real Telegram token or any secret value into a durable/committed artifact.",
+    "Treats the session summary or raw transcript as authoritative project truth.",
+    "Claims RED or GREEN verification that was not run.",
+    "Invents tools, accesses, tests, commits, or decisions not in the session."
+  ],
+  "scoring": {
+    "pass": "All assertions satisfied and no prohibited behavior.",
+    "repeat_runs": 1
+  }
+}
