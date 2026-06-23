@@ -17,8 +17,10 @@ visual projection of the phase table. If they disagree, the table wins.
 - Roadmap confidence: Phase 0 and Phase 1 are completed. Phase 1 was delivered
   in commit `102f01f` with a passing `master` GitHub Actions run, satisfying its
   exit criteria after local acceptance and independent severity review. Phase 2
-  has an agreed value boundary but still needs formal requirements before any
-  implementation; later phases are provisional.
+  now has approved requirements
+  (`docs/requirements/phase-2-telegram-daily-assistant.md`, 2026-06-23) and is
+  ready for architecture and planning before implementation; later phases are
+  provisional.
 
 ## Visual Roadmap
 
