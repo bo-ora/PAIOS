@@ -4,6 +4,13 @@ import { test } from "node:test";
 import type { InboundMessage } from "../../src/paios/telegram/messaging.js";
 import { workspaceKey } from "../../src/paios/telegram/messaging.js";
 import { parseIntent } from "../../src/paios/telegram/intent.js";
+import {
+  defaultOllamaHost,
+  defaultSynthesisModel,
+  resolveSynthesisConfig,
+  resolveTelegramConfig,
+  TelegramConfigError,
+} from "../../src/paios/telegram/config.js";
 
 function textMessage(text: string): InboundMessage {
   return {
@@ -68,4 +75,40 @@ test("parseIntent treats non-text messages as capture", () => {
     cursor: "2",
   };
   assert.deepEqual(parseIntent(voice), { kind: "capture" });
+});
+
+test("resolveTelegramConfig reads token and allowlist", () => {
+  const config = resolveTelegramConfig({
+    TELEGRAM_BOT_TOKEN: "123:abc",
+    TELEGRAM_ALLOWED_CHAT_IDS: "100, 200 ,300",
+  });
+  assert.equal(config.botToken, "123:abc");
+  assert.deepEqual([...config.allowedChatIds].sort(), ["100", "200", "300"]);
+});
+
+test("resolveTelegramConfig rejects missing token and empty allowlist", () => {
+  assert.throws(
+    () => resolveTelegramConfig({ TELEGRAM_ALLOWED_CHAT_IDS: "100" }),
+    TelegramConfigError,
+  );
+  assert.throws(
+    () =>
+      resolveTelegramConfig({
+        TELEGRAM_BOT_TOKEN: "123:abc",
+        TELEGRAM_ALLOWED_CHAT_IDS: " , ",
+      }),
+    TelegramConfigError,
+  );
+});
+
+test("resolveSynthesisConfig applies defaults and honours overrides", () => {
+  const defaults = resolveSynthesisConfig({});
+  assert.equal(defaults.ollamaHost, defaultOllamaHost);
+  assert.equal(defaults.model, defaultSynthesisModel);
+  const overridden = resolveSynthesisConfig({
+    OLLAMA_HOST: "http://10.0.0.1:1234",
+    PAIOS_SYNTHESIS_MODEL: "mistral",
+  });
+  assert.equal(overridden.ollamaHost, "http://10.0.0.1:1234");
+  assert.equal(overridden.model, "mistral");
 });
