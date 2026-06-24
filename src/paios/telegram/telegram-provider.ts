@@ -37,9 +37,17 @@ interface RawMessage {
   is_topic_message?: boolean;
 }
 
+interface RawCallbackQuery {
+  id?: string;
+  from?: { id?: number | string };
+  message?: RawMessage;
+  data?: string;
+}
+
 interface RawUpdate {
   update_id?: number;
   message?: RawMessage;
+  callback_query?: RawCallbackQuery;
 }
 
 function toAttachment(file: RawFile): InboundAttachment {
@@ -66,6 +74,9 @@ export function normalizeUpdate(
   const raw = update as RawUpdate;
   if (typeof raw.update_id !== "number") {
     return null;
+  }
+  if (raw.callback_query !== undefined) {
+    return normalizeCallbackQuery(raw, raw.callback_query, allowed);
   }
   const message = raw.message;
   if (message?.chat?.id === undefined) {
@@ -117,6 +128,41 @@ export function normalizeUpdate(
     return { ...base, kind: "text", text: message.caption };
   }
   return { ...base, kind: "unsupported" };
+}
+
+function normalizeCallbackQuery(
+  raw: RawUpdate,
+  query: RawCallbackQuery,
+  allowed: ReadonlySet<string>,
+): InboundMessage | null {
+  const chatRaw = query.message?.chat?.id;
+  if (chatRaw === undefined || query.id === undefined) {
+    return null;
+  }
+  const chatId = String(chatRaw);
+  const senderId = query.from?.id === undefined ? chatId : String(query.from.id);
+  // Enforce the allowlist on both the chat and the tapping user.
+  if (!allowed.has(chatId) || !allowed.has(senderId)) {
+    return null;
+  }
+  const workspace: Workspace = {
+    channel: "telegram",
+    chatId,
+    ...(query.message?.is_topic_message === true &&
+    query.message.message_thread_id !== undefined
+      ? { threadId: String(query.message.message_thread_id) }
+      : {}),
+  };
+  return {
+    provider: "telegram",
+    messageId: String(query.message?.message_id ?? raw.update_id),
+    workspace,
+    senderId,
+    kind: "callback",
+    callback: { payload: query.data ?? "", callbackId: query.id },
+    timestamp: new Date(0).toISOString(),
+    cursor: String(raw.update_id),
+  };
 }
 
 function extractResultArray(payload: unknown): unknown[] {
@@ -200,6 +246,18 @@ export function createTelegramProvider(
         ...(reply.workspace.threadId === undefined
           ? {}
           : { message_thread_id: Number(reply.workspace.threadId) }),
+        ...(reply.actions === undefined || reply.actions.length === 0
+          ? {}
+          : {
+              reply_markup: {
+                inline_keyboard: [
+                  reply.actions.map((action) => ({
+                    text: action.label,
+                    callback_data: action.payload,
+                  })),
+                ],
+              },
+            }),
       });
       const response = await options.fetch(method("sendMessage"), {
         method: "POST",
@@ -209,6 +267,19 @@ export function createTelegramProvider(
       if (!response.ok) {
         throw new Error(
           `Telegram sendMessage failed with status ${response.status}.`,
+        );
+      }
+    },
+
+    async answerCallback(callbackId: string): Promise<void> {
+      const response = await options.fetch(method("answerCallbackQuery"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ callback_query_id: callbackId }),
+      });
+      if (!response.ok) {
+        throw new Error(
+          `Telegram answerCallbackQuery failed with status ${response.status}.`,
         );
       }
     },

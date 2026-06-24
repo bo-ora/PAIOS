@@ -13,7 +13,10 @@ import type {
   CursorStore,
   InboundMessage,
 } from "../../src/paios/telegram/messaging.js";
-import { workspaceKey } from "../../src/paios/telegram/messaging.js";
+import {
+  workspaceKey,
+  parseCallbackPayload,
+} from "../../src/paios/telegram/messaging.js";
 import { parseIntent } from "../../src/paios/telegram/intent.js";
 import {
   formatRecallReply,
@@ -163,6 +166,22 @@ test("workspaceKey encodes chat-only and chat+thread workspaces", () => {
     workspaceKey({ channel: "telegram", chatId: "100", threadId: "5" }),
     "telegram:100:5",
   );
+});
+
+test("parseCallbackPayload parses view/sum tokens and rejects junk", () => {
+  assert.deepEqual(parseCallbackPayload("view:abc-123"), {
+    action: "view",
+    recordId: "abc-123",
+  });
+  assert.deepEqual(parseCallbackPayload("sum:abc-123"), {
+    action: "sum",
+    recordId: "abc-123",
+  });
+  assert.equal(parseCallbackPayload(""), null);
+  assert.equal(parseCallbackPayload("x".repeat(200)), null);
+  assert.equal(parseCallbackPayload("drop;table"), null);
+  assert.equal(parseCallbackPayload("view:bad id"), null);
+  assert.equal(parseCallbackPayload("unknown:abc"), null);
 });
 
 test("parseIntent recognises ask via /ask and ?", () => {
@@ -401,6 +420,99 @@ test("normalizeUpdate marks unhandled content unsupported", () => {
     allowed,
   );
   assert.equal(sticker?.kind, "unsupported");
+});
+
+function callbackUpdate(
+  updateId: number,
+  chatId: number,
+  data: string,
+): unknown {
+  return {
+    update_id: updateId,
+    callback_query: {
+      id: `cb-${updateId}`,
+      from: { id: chatId },
+      message: {
+        message_id: updateId * 10,
+        chat: { id: chatId, type: "private" },
+        date: 1750000000,
+      },
+      data,
+    },
+  };
+}
+
+test("sendReply attaches an inline keyboard when actions are present", async () => {
+  const bodies: string[] = [];
+  const fetch: FetchLike = (_url, init) => {
+    if (init?.body !== undefined) {
+      bodies.push(String(init.body));
+    }
+    return Promise.resolve(jsonResponse({ ok: true }));
+  };
+  const provider = createTelegramProvider({
+    config: { botToken: "t", allowedChatIds: allowed },
+    cursorStore: memoryCursorStore(null),
+    fetch,
+  });
+  await provider.sendReply({
+    workspace: { channel: "telegram", chatId: "100" },
+    text: "hi",
+    actions: [{ label: "👁 View", payload: "view:r1" }],
+  });
+  const body = JSON.parse(bodies[0] ?? "{}");
+  assert.equal(body.reply_markup.inline_keyboard[0][0].callback_data, "view:r1");
+  assert.equal(body.reply_markup.inline_keyboard[0][0].text, "👁 View");
+});
+
+test("poll normalizes a callback_query from an allowlisted user", async () => {
+  const { fetch } = scriptedFetch([
+    {
+      match: "/getUpdates",
+      respond: () =>
+        jsonResponse({ ok: true, result: [callbackUpdate(20, 100, "view:r1")] }),
+    },
+  ]);
+  const provider = createTelegramProvider({
+    config: { botToken: "t", allowedChatIds: allowed },
+    cursorStore: memoryCursorStore(null),
+    fetch,
+  });
+  const messages = await provider.poll(0);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.kind, "callback");
+  assert.equal(messages[0]?.callback?.payload, "view:r1");
+  assert.equal(messages[0]?.callback?.callbackId, "cb-20");
+  assert.equal(messages[0]?.workspace.chatId, "100");
+});
+
+test("poll drops a callback_query from a non-allowlisted user", async () => {
+  const { fetch } = scriptedFetch([
+    {
+      match: "/getUpdates",
+      respond: () =>
+        jsonResponse({ ok: true, result: [callbackUpdate(21, 999, "view:r1")] }),
+    },
+  ]);
+  const provider = createTelegramProvider({
+    config: { botToken: "t", allowedChatIds: allowed },
+    cursorStore: memoryCursorStore(null),
+    fetch,
+  });
+  assert.equal((await provider.poll(0)).length, 0);
+});
+
+test("answerCallback posts to answerCallbackQuery", async () => {
+  const { fetch, calls } = scriptedFetch([
+    { match: "/answerCallbackQuery", respond: () => jsonResponse({ ok: true }) },
+  ]);
+  const provider = createTelegramProvider({
+    config: { botToken: "t", allowedChatIds: allowed },
+    cursorStore: memoryCursorStore(null),
+    fetch,
+  });
+  await provider.answerCallback?.("cb-20");
+  assert.ok(calls.some((url) => url.includes("/answerCallbackQuery")));
 });
 
 test("provider polls with the stored offset and filters the allowlist", async () => {
