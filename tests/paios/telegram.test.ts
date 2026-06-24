@@ -15,8 +15,12 @@ import type {
 } from "../../src/paios/telegram/messaging.js";
 import { workspaceKey } from "../../src/paios/telegram/messaging.js";
 import { parseIntent } from "../../src/paios/telegram/intent.js";
-import { formatRecallReply } from "../../src/paios/telegram/recall.js";
+import {
+  formatRecallReply,
+  formatRecordView,
+} from "../../src/paios/telegram/recall.js";
 import type { RecordListItem } from "../../src/paios/knowledge/records.js";
+import type { KnowledgeRecord } from "../../src/paios/types.js";
 import {
   defaultOllamaHost,
   defaultSynthesisModel,
@@ -224,6 +228,33 @@ test("formatRecallReply lists records newest-first and handles empty", () => {
   const text = formatRecallReply([item]).text;
   assert.match(text, /r1/);
   assert.match(text, /Groceries/);
+});
+
+function knowledgeRecordFixture(text: string): KnowledgeRecord {
+  return {
+    id: "r1",
+    sourceType: "note",
+    title: "T",
+    sourceReference: "sources/notes/r1.txt",
+    capturedAt: "2026-06-24T10:00:00.000Z",
+    state: "ready",
+    normalizedText: text,
+    provenance: { adapter: "telegram-note", byteLength: text.length, checksum: "c" },
+    error: null,
+  };
+}
+
+test("formatRecordView shows short content in full without truncation", () => {
+  const out = formatRecordView(knowledgeRecordFixture("hello world"));
+  assert.match(out, /r1/);
+  assert.match(out, /hello world/);
+  assert.doesNotMatch(out, /truncated/i);
+});
+
+test("formatRecordView bounds long content with a truncation marker", () => {
+  const out = formatRecordView(knowledgeRecordFixture("x".repeat(5000)), 1000);
+  assert.ok(out.length <= 1200);
+  assert.match(out, /truncated/i);
 });
 
 test("parseIntent treats plain text as capture and empty ask as help", () => {
