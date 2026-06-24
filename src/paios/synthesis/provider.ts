@@ -132,12 +132,19 @@ export function buildSynthesisPrompt(request: SynthesisRequest): {
   return { system: synthesisSystemPrompt, user };
 }
 
+// Framing note: llama3.1:8b applies a generic "this looks like personal data"
+// safety refusal when the prompt foregrounds words like personal/private/
+// sensitive — even on the user's OWN notes. So this prompt frames the task as
+// a neutral text-condensation job (the text is the user's own saved notes they
+// explicitly asked to summarize) and forbids any disclaimer/refusal/commentary,
+// while keeping the faithfulness guarantees. Verified live against Ollama.
 const summarySystemPrompt = [
-  "You are the user's private personal knowledge assistant.",
-  "Summarize the user's OWN records below faithfully and concisely.",
-  "Use ONLY what the records contain; do not add, invent, or infer facts that are not present.",
-  "Preserve concrete personal details (names, numbers, dates) exactly as written — it is the user's own information.",
-  "Write a plain-language summary; if the records are already brief, a one-line summary is fine.",
+  "You are a faithful text summarizer for the user's own saved notes.",
+  "The user has explicitly asked you to summarize the text below; it is their own content that they saved themselves.",
+  "Write a concise, plain-language summary in the same language as the text.",
+  "Use ONLY what the text says — do not add, invent, or infer anything that is not present — and keep concrete details (names, numbers, dates) exactly as written.",
+  "Output only the summary itself: no preamble, no disclaimers, no warnings, no refusals, and no commentary about the content.",
+  "If the text is short, a single sentence is fine.",
 ].join(" ");
 
 export function buildSummaryPrompt(request: SummarizeRequest): {

@@ -123,6 +123,17 @@ test("buildSummaryPrompt instructs faithful transform over the given records", (
   assert.match(prompt.user, /gardening/);
 });
 
+test("buildSummaryPrompt forbids refusing or moralizing over the user's own data", () => {
+  const prompt = buildSummaryPrompt({
+    records: [record("r1", "personal details about my family and life")],
+  });
+  // The model must not apply a generic personal-data safety refusal to the
+  // user's own records (regression: llama3.1:8b refused a voice-note summary).
+  // The prompt forbids disclaimers/refusals and avoids foregrounding
+  // personal/private/sensitive framing that primes the refusal.
+  assert.match(prompt.system, /no refusals?|do not refuse|never refuse|no disclaimers/i);
+});
+
 test("buildAssistPrompt forbids asserting ungrounded personal facts", () => {
   const prompt = buildAssistPrompt({ message: "hi", context: [] });
   assert.match(prompt.system, /do not state facts about the user|personal/i);
