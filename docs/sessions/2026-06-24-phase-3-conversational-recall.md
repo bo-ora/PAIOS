@@ -50,8 +50,10 @@ with a dated roadmap/vision review.
   (Voice section resolved), `.env.example`, `docs/operations/credentials.md`,
   `docs/TECH_DEBT.md`, this session doc, `docs/ROADMAP.md`,
   `docs/reviews/2026-06-24-phase-3-roadmap-vision-review.md`.
-- Commits: `a11b934` (heuristic fix + tech-debt), `9e499d3` (summarize fix),
-  plus closeout commits for the tier docs, evidence, and roadmap flip.
+- Commits (this session): `a11b934` (assist over-routing fix + TD-005/6/7),
+  `9e499d3` (summarize refusal fix), `af6ae55` (Phase 3 complete + voice tier +
+  evidence + roadmap flip), `5ebc083` (grounded-synthesis deflection fix +
+  TD-008 + V2b walkthrough).
 - Models pulled (one-time, user-consented, into git-ignored `.local/models/`):
   `ggml-small.bin` (SHA-256 `1be3a9b2…ea987b`, matches the pinned harness value),
   `ggml-medium-q5_0.bin` (`19fea4b3…34220f`), `ggml-medium.bin` (`6c14d5ad…56208`),
