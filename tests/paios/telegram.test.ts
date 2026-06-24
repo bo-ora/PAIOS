@@ -57,6 +57,7 @@ import {
   type AssistantDeps,
 } from "../../src/paios/telegram/assistant.js";
 import { collectTelegramDiagnostics } from "../../src/paios/telegram/doctor.js";
+import { createDialogueStore } from "../../src/paios/telegram/dialogue.js";
 
 const temporaryRoots: string[] = [];
 
@@ -175,6 +176,34 @@ test("workspaceKey encodes chat-only and chat+thread workspaces", () => {
     workspaceKey({ channel: "telegram", chatId: "100", threadId: "5" }),
     "telegram:100:5",
   );
+});
+
+test("dialogue store defaults to grounded and toggles mode per key", () => {
+  const store = createDialogueStore();
+  assert.equal(store.getMode("ws:1"), "grounded");
+  store.setMode("ws:1", "assist");
+  assert.equal(store.getMode("ws:1"), "assist");
+  assert.equal(store.getMode("ws:2"), "grounded");
+});
+
+test("dialogue store drops turns older than the ttl and caps at maxTurns", () => {
+  let now = 1000;
+  const store = createDialogueStore({ ttlMs: 100, maxTurns: 2, now: () => now });
+  store.appendTurn("k", { role: "user", text: "old", at: 0 });
+  store.appendTurn("k", { role: "user", text: "a", at: 980 });
+  store.appendTurn("k", { role: "user", text: "b", at: 990 });
+  now = 1001;
+  const turns = store.recentTurns("k");
+  assert.equal(turns.length, 2);
+  assert.deepEqual(turns.map((t) => t.text), ["a", "b"]);
+});
+
+test("dialogue store round-trips the last record id per key", () => {
+  const store = createDialogueStore();
+  assert.equal(store.lastRecordId("k"), undefined);
+  store.setLastRecordId("k", "r1");
+  assert.equal(store.lastRecordId("k"), "r1");
+  assert.equal(store.lastRecordId("other"), undefined);
 });
 
 test("parseCallbackPayload parses view/sum tokens and rejects junk", () => {
