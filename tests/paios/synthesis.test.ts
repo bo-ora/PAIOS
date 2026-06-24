@@ -76,6 +76,25 @@ test("buildSynthesisPrompt embeds every record id and a grounding rule", () => {
   assert.match(prompt.system, /cannot|don't know|do not know/i);
 });
 
+test("buildSynthesisPrompt tells the model the source text is the readable content", () => {
+  // Regression: asked "what did I say in my last voice note", the model
+  // deflected ("I cannot access the content of your voice notes") even though
+  // the transcript was supplied. The prompt must frame the source text as the
+  // complete readable content of whatever the user is asking about (neutrally —
+  // without echoing trigger words like "voice note"/"audio", which prime the
+  // very refusal, as the summarize fix showed).
+  const prompt = buildSynthesisPrompt({
+    question: "what did i say in my last voice note",
+    records: [record("r1", "the transcript text")],
+  });
+  assert.match(prompt.system, /complete[, ].*content|content of whatever|answer directly from this text/i);
+  // The model deflects on capture-modality words in the question itself
+  // ("I cannot access or play audio files"). Those words carry no meaning for a
+  // text-grounded answer, so the question shown to the model is neutralized.
+  assert.doesNotMatch(prompt.user, /voice note|audio/i);
+  assert.match(prompt.user, /\bnote\b/i);
+});
+
 test("extractCitations returns supplied ids in record order, ignoring unknown", () => {
   const records = [record("r1", "a"), record("r2", "b"), record("r3", "c")];
   assert.deepEqual(

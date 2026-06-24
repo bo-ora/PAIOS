@@ -105,11 +105,32 @@ export function toSearchQuery(question: string): string {
 const synthesisSystemPrompt = [
   "You are the user's private personal knowledge assistant.",
   "The numbered sources are the user's OWN notes that they captured and are asking you to recall for them.",
+  // Regression guard: the model used to deflect ("I cannot access the content
+  // of your voice notes") when the question named a voice note or file. As with
+  // the summarize prompt, enumerating those trigger words primes the very
+  // refusal — so frame the sources neutrally: the text below already IS the
+  // complete content of whatever the user is asking about.
+  "Each source's text below is already the complete, readable content of one of the user's notes. Treat it as the full content of whatever the user is asking about, however they phrase it, and answer directly from this text.",
   "Answer the user's question directly using ONLY those sources, including any personal details they recorded (names, numbers, dates) — it is their own information, so do not refuse or withhold it.",
   "Cite every claim inline with the source's record id in square brackets, e.g. [<record-id>].",
   "Do not use any knowledge that is not in the sources.",
   "If the sources do not contain the answer, say plainly that you cannot find it in their stored knowledge — do not guess or invent details.",
 ].join(" ");
+
+// A note's stored text is identical whether it was captured by voice or typed,
+// so capture-modality words ("voice note", "audio", "recording") carry no
+// meaning for a text-grounded answer — but they make llama3.1:8b reflexively
+// refuse ("I cannot access or play audio files"). Strip them from the question
+// shown to the model. Retrieval still uses the original, un-neutralized question.
+export function neutralizeCaptureModality(question: string): string {
+  return question
+    .replace(
+      /\b(?:voice|audio)[\s-]*(notes?|messages?|recordings?|memos?|files?|transcripts?)\b/gi,
+      (_match, noun: string) => noun,
+    )
+    .replace(/\brecordings?\b/gi, (match) => (match.endsWith("s") ? "notes" : "note"))
+    .replace(/\baudio\b/gi, "note");
+}
 
 export function buildSynthesisPrompt(request: SynthesisRequest): {
   system: string;
@@ -124,7 +145,7 @@ export function buildSynthesisPrompt(request: SynthesisRequest): {
     })
     .join("\n\n");
   const user = [
-    `Question: ${request.question}`,
+    `Question: ${neutralizeCaptureModality(request.question)}`,
     "",
     "Sources:",
     sources,

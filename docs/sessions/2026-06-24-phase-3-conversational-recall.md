@@ -125,6 +125,32 @@ record returns a faithful summary with no refusal.
 no message body, transcript, summary, or audio content. Real-world confirmation
 of the leak-free-logs constraint.
 
+### V2b — Post-acceptance user walkthrough (live bot, 2026-06-24)
+
+The user ran a guided acceptance walkthrough of all six user scenarios against
+the live bot (turbo tier). Results: View, Summarize (refusal-free), assist
+general (`[assist]`), mode toggles, voice (incl. a code-switched EN+UK note),
+and `/help` all passed; the grounding guarantee was never violated (every reply
+cited real sources and invented nothing). Two classes of finding:
+
+- **Fixed this session (Important bug):** grounded synthesis *deflected* on the
+  user's own content — "what did I say in my last voice note" /
+  "what is in my voice notes" returned "I cannot access … your voice notes /
+  audio files" even though the transcripts were supplied. Root cause was the
+  same as the summarize refusal, but the trigger was capture-modality words in
+  the *user's question*, which the system prompt could not override. Fix:
+  `neutralizeCaptureModality` strips "voice note"/"audio"/"recording" from the
+  question shown to the model (retrieval still uses the original) plus neutral
+  source framing in `buildSynthesisPrompt`. **Live-verified:** the deflection is
+  gone and "what is in my voice notes" now returns a substantive grounded answer
+  reading the transcripts. Test-first regression added (167 tests pass).
+- **Deferred to a Phase 3.1 polish backlog (TD-008):** recall list shows
+  ids/filenames not content snippets; ask-vs-capture undiscoverable and bare
+  `help` unrecognized; no record-delete command; grounded ask is lexical not
+  recency-aware ("last" unresolved); lexical retrieval misses morphological
+  variants; assist context-bleed on topic switch; UK→EN summaries. None break
+  the grounding guarantee; all are usability/feature gaps.
+
 ## Blockers and Open Questions
 
 - The foreign toponym *Oviedo* was transcribed imperfectly by every tier
