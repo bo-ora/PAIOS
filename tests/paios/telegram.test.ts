@@ -460,9 +460,14 @@ test("sendReply attaches an inline keyboard when actions are present", async () 
     text: "hi",
     actions: [{ label: "👁 View", payload: "view:r1" }],
   });
-  const body = JSON.parse(bodies[0] ?? "{}");
-  assert.equal(body.reply_markup.inline_keyboard[0][0].callback_data, "view:r1");
-  assert.equal(body.reply_markup.inline_keyboard[0][0].text, "👁 View");
+  const body = JSON.parse(bodies[0] ?? "{}") as {
+    reply_markup: {
+      inline_keyboard: { text: string; callback_data: string }[][];
+    };
+  };
+  const button = body.reply_markup.inline_keyboard[0]?.[0];
+  assert.equal(button?.callback_data, "view:r1");
+  assert.equal(button?.text, "👁 View");
 });
 
 test("poll normalizes a callback_query from an allowlisted user", async () => {
