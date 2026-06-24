@@ -1030,11 +1030,11 @@ test("processMessage answers a question citing a seeded record", async () => {
     inboundFor("text", { text: "/ask what is the router password" }),
     assistantDeps(root, new FakeAssistantProvider([]), synthesis),
   );
-  assert.match(reply, /hunter2/);
-  assert.match(reply, new RegExp(note.id));
+  assert.match(reply.text, /hunter2/);
+  assert.match(reply.text, new RegExp(note.id));
 });
 
-test("processMessage summarises an inspected record and reports missing ones", async () => {
+test("processMessage shows an inspected record and reports missing ones", async () => {
   const root = temporaryRoot();
   const note = addNote(root, { content: "inspect me" });
   const { provider: synthesis } = fakeSynthesis("unused");
@@ -1043,13 +1043,95 @@ test("processMessage summarises an inspected record and reports missing ones", a
     inboundFor("text", { text: `/show ${note.id}` }),
     deps,
   );
-  assert.match(found, new RegExp(note.id));
-  assert.match(found, /State: ready/);
+  assert.match(found.text, new RegExp(note.id));
+  assert.match(found.text, /State: ready/);
+  assert.match(found.text, /inspect me/);
   const missing = await processMessage(
     inboundFor("text", { text: "/show does-not-exist" }),
     deps,
   );
-  assert.match(missing, /not found/i);
+  assert.match(missing.text, /not found/i);
+});
+
+test("processMessage set-mode persists per workspace and labels assist replies", async () => {
+  const root = temporaryRoot();
+  const store = createDialogueStore();
+  const { provider: synthesis } = fakeSynthesis("unused");
+  const deps: AssistantDeps = {
+    ...assistantDeps(root, new FakeAssistantProvider([]), synthesis),
+    dialogue: store,
+  };
+  const toggled = await processMessage(
+    inboundFor("text", { text: "/assist" }),
+    deps,
+  );
+  assert.match(toggled.text, /assist mode/i);
+  assert.equal(store.getMode("telegram:100"), "assist");
+  const chatted = await processMessage(
+    inboundFor("text", { text: "brainstorm a name" }),
+    deps,
+  );
+  assert.match(chatted.text, /^\[assist\]/);
+});
+
+test("processMessage capture confirmation carries view/summarize actions", async () => {
+  const root = temporaryRoot();
+  const { provider: synthesis } = fakeSynthesis("unused");
+  const deps = assistantDeps(root, new FakeAssistantProvider([]), synthesis);
+  const reply = await processMessage(
+    inboundFor("text", { text: "buy oat milk" }),
+    deps,
+  );
+  assert.match(reply.text, /Captured note/);
+  assert.equal(reply.actions?.length, 2);
+  assert.match(reply.actions?.[0]?.payload ?? "", /^view:/);
+  assert.match(reply.actions?.[1]?.payload ?? "", /^sum:/);
+});
+
+test("processMessage handles a view callback and acknowledges the tap", async () => {
+  const root = temporaryRoot();
+  const note = addNote(root, { content: "callback target content" });
+  const acked: string[] = [];
+  const provider: MessagingProvider = {
+    poll: () => Promise.resolve([]),
+    sendReply: () => Promise.resolve(),
+    downloadAttachment: () => Promise.resolve(new Uint8Array()),
+    acknowledge: () => Promise.resolve(),
+    answerCallback: (id) => {
+      acked.push(id);
+      return Promise.resolve();
+    },
+  };
+  const { provider: synthesis } = fakeSynthesis("unused");
+  const reply = await processMessage(
+    inboundFor("callback", {
+      callback: { payload: `view:${note.id}`, callbackId: "cb-1" },
+    }),
+    assistantDeps(root, provider, synthesis),
+  );
+  assert.match(reply.text, /callback target content/);
+  assert.deepEqual(acked, ["cb-1"]);
+});
+
+test("processMessage recall lists records with an action on the latest", async () => {
+  const root = temporaryRoot();
+  addNote(
+    root,
+    { content: "first" },
+    { adapter: "telegram-note", externalReference: { channel: "telegram", chatId: "100", messageId: "1" } },
+  );
+  const second = addNote(
+    root,
+    { content: "second" },
+    { adapter: "telegram-note", externalReference: { channel: "telegram", chatId: "100", messageId: "2" } },
+  );
+  const { provider: synthesis } = fakeSynthesis("unused");
+  const reply = await processMessage(
+    inboundFor("text", { text: "recent" }),
+    assistantDeps(root, new FakeAssistantProvider([]), synthesis),
+  );
+  assert.match(reply.text, new RegExp(second.id));
+  assert.match(reply.actions?.[0]?.payload ?? "", new RegExp(`view:${second.id}`));
 });
 
 test("a failed capture is reported and still acknowledged (no silent drop)", async () => {

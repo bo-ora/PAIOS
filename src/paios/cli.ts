@@ -48,6 +48,7 @@ import { createFileCursorStore } from "./telegram/cursor-store.js";
 import { createTelegramProvider } from "./telegram/telegram-provider.js";
 import { createOllamaProvider } from "./synthesis/ollama-provider.js";
 import { runAssistant, type AssistantDeps } from "./telegram/assistant.js";
+import { createDialogueStore } from "./telegram/dialogue.js";
 import type {
   KnowledgeRecord,
   KnowledgeSearchResult,
@@ -454,6 +455,7 @@ async function runTelegram(
         config: synthesisConfig,
         fetch: fetchImpl,
       }),
+      dialogue: createDialogueStore(),
       ...(audio === undefined ? {} : { audio }),
       log: (event) => {
         io.stdout(
