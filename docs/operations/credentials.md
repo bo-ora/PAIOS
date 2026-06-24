@@ -44,7 +44,12 @@ environment, not in this inventory's secret store unless convenient:
 - `PAIOS_SYNTHESIS_MODEL` — override for the Phase 2 local answer-synthesis
   model; default is recorded in the Phase 2 architecture ADR.
 - `PAIOS_FFMPEG_PATH`, `PAIOS_WHISPER_CLI_PATH`, `PAIOS_WHISPER_MODEL_PATH` —
-  Phase 1 audio toolchain paths (see development-environment.md).
+  Phase 1 audio toolchain paths (see development-environment.md). For Phase 3
+  (Conversational Recall), point `PAIOS_WHISPER_MODEL_PATH` at the locked voice
+  tier: default `ggml-small.bin` (Ukrainian + English), with
+  `ggml-medium-q5_0.bin` as the live-A/B alternative. Language is auto-detected
+  (no fixed `-l` flag); `large-v3` is ruled out on the current CPU. The final
+  tier is chosen from the live A/B smoke evidence (see ADR-0008).
 
 ## Adding a New Credential
 

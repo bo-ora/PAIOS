@@ -1206,6 +1206,31 @@ test("whisper-cli transcriber uses deterministic arguments and cleans output", (
   assert.deepEqual(readdirNames(temporary), []);
 });
 
+test("whisper-cli transcriber defaults to auto language detection (UK+EN, Phase 3 D)", () => {
+  const root = temporaryRoot();
+  const temporary = join(root, "temporary");
+  const normalizedPath = join(root, "normalized.wav");
+  const modelPath = join(root, "ggml-small.bin");
+  writeFileSync(normalizedPath, canonicalWavFixture());
+  writeFileSync(modelPath, "model fixture");
+  let observedLanguage = "";
+  const runner: TranscriptionProcessRunner = (_command, args) => {
+    const languageFlagIndex = args.indexOf("-l");
+    observedLanguage = args[languageFlagIndex + 1] ?? "";
+    writeFileSync(`${args[8]}.txt`, "detected text");
+    return { status: 0, stderr: "" };
+  };
+  const result = transcribeNormalizedAudio(normalizedPath, {
+    whisperCommand: "whisper-cli",
+    whisperVersion: "whisper.cpp 1.7.6",
+    modelPath,
+    temporaryRoot: temporary,
+    runProcess: runner,
+  });
+  assert.equal(observedLanguage, "auto");
+  assert.equal(result.language, "auto");
+});
+
 test("whisper-cli transcriber classifies process failures and redacts paths", () => {
   const cases: {
     name: string;
