@@ -464,7 +464,7 @@ async function runTelegram(
       },
     };
     io.stdout(
-      `PAIOS Telegram assistant serving ${telegramConfig.allowedChatIds.size} workspace(s) with model ${synthesisConfig.model}.\n`,
+      `PAIOS Telegram assistant serving ${telegramConfig.allowedChatIds.size} workspace(s) with model ${synthesisConfig.model} (grounded mode default; /assist for open conversation).\n`,
     );
     await runAssistant(deps);
     return 0;

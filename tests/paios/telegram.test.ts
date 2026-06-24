@@ -1022,6 +1022,25 @@ test("runAssistantOnce captures a text note, replies, and acknowledges", async (
   assert.equal(searchRecords(root, '"parcel"').length, 1);
 });
 
+test("help reply documents the Phase 3 capabilities", async () => {
+  const root = temporaryRoot();
+  const { provider: synthesis } = fakeSynthesis("unused");
+  const reply = await processMessage(
+    inboundFor("text", { text: "/help" }),
+    assistantDeps(root, new FakeAssistantProvider([]), synthesis),
+  );
+  for (const fragment of [
+    "recent",
+    "/show",
+    "/summarize",
+    "/assist",
+    "/grounded",
+    "View",
+  ]) {
+    assert.match(reply.text, new RegExp(fragment.replace("/", "\\/")), fragment);
+  }
+});
+
 test("processMessage answers a question citing a seeded record", async () => {
   const root = temporaryRoot();
   const note = addNote(root, { content: "The router password is hunter2." });
