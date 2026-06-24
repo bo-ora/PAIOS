@@ -97,7 +97,7 @@ function toRetrieved(
   recordId: string,
 ): RetrievedRecord | null {
   const record = getRecord(dataRoot, recordId);
-  if (record === null || record.state !== "ready") {
+  if (record?.state !== "ready") {
     return null;
   }
   return {
