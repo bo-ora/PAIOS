@@ -619,6 +619,86 @@ export function rebuildSearchIndex(dataRoot: string): number {
   }
 }
 
+export interface RecordListItem {
+  id: string;
+  sourceType: KnowledgeSourceType;
+  title: string | null;
+  capturedAt: string;
+  sourceReference: string;
+  state: KnowledgeRecord["state"];
+}
+
+export interface RecordListFilter {
+  sourceTypes?: KnowledgeSourceType[];
+  workspace?: { chatId: string; threadId?: string };
+  limit?: number;
+}
+
+interface RecordListRow {
+  id: string;
+  source_type: KnowledgeSourceType;
+  title: string | null;
+  captured_at: string;
+  source_reference: string;
+  state: KnowledgeRecord["state"];
+}
+
+/**
+ * Model-free recency/metadata recall (ADR-0008, Phase 3 A). Returns ready
+ * records newest first, optionally filtered by source type and Telegram
+ * workspace provenance, bounded by a small limit. Reads existing columns only;
+ * no new schema and no model call.
+ */
+export function listRecords(
+  dataRoot: string,
+  filter: RecordListFilter = {},
+): RecordListItem[] {
+  const limit =
+    filter.limit !== undefined &&
+    Number.isInteger(filter.limit) &&
+    filter.limit > 0
+      ? Math.min(filter.limit, 100)
+      : 20;
+  const clauses = ["state = 'ready'"];
+  const params: (string | number)[] = [];
+  if (filter.sourceTypes !== undefined && filter.sourceTypes.length > 0) {
+    clauses.push(
+      `source_type IN (${filter.sourceTypes.map(() => "?").join(", ")})`,
+    );
+    params.push(...filter.sourceTypes);
+  }
+  if (filter.workspace !== undefined) {
+    clauses.push("json_extract(external_reference_json, '$.chatId') = ?");
+    params.push(filter.workspace.chatId);
+    if (filter.workspace.threadId !== undefined) {
+      clauses.push("json_extract(external_reference_json, '$.threadId') = ?");
+      params.push(filter.workspace.threadId);
+    }
+  }
+  const connection = openKnowledgeDatabase(dataRoot);
+  try {
+    const rows = connection.database
+      .prepare(`
+        SELECT id, source_type, title, captured_at, source_reference, state
+        FROM records
+        WHERE ${clauses.join(" AND ")}
+        ORDER BY captured_at DESC, id ASC
+        LIMIT ?
+      `)
+      .all(...params, limit) as unknown as RecordListRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      sourceType: row.source_type,
+      title: row.title,
+      capturedAt: row.captured_at,
+      sourceReference: row.source_reference,
+      state: row.state,
+    }));
+  } finally {
+    connection.close();
+  }
+}
+
 export function getRecord(
   dataRoot: string,
   id: string,

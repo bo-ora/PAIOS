@@ -65,6 +65,7 @@ import {
   getRecord,
   KnowledgeInputError,
   describeAudioMedia,
+  listRecords,
   rebuildSearchIndex,
   searchRecords,
 } from "../../src/paios/knowledge/records.js";
@@ -2283,4 +2284,52 @@ test("addNote records a custom adapter and external reference", () => {
     chatId: "42",
     messageId: "7",
   });
+});
+
+test("listRecords returns ready records newest first within the limit", () => {
+  const root = temporaryRoot();
+  const first = addNote(root, { content: "first note body" });
+  const second = addNote(root, { content: "second note body" });
+  const items = listRecords(root, { limit: 10 });
+  assert.equal(items.length, 2);
+  assert.equal(items[0]?.id, second.id);
+  assert.equal(items[1]?.id, first.id);
+  assert.ok(items.every((item) => item.state === "ready"));
+  assert.equal(items[0]?.sourceType, "note");
+});
+
+test("listRecords filters by source type", () => {
+  const root = temporaryRoot();
+  addNote(root, { content: "just a note" });
+  const onlyNotes = listRecords(root, { sourceTypes: ["note"] });
+  assert.ok(onlyNotes.every((item) => item.sourceType === "note"));
+  const onlyAudio = listRecords(root, { sourceTypes: ["audio"] });
+  assert.equal(onlyAudio.length, 0);
+});
+
+test("listRecords scopes by workspace provenance", () => {
+  const root = temporaryRoot();
+  addNote(
+    root,
+    { content: "workspace one" },
+    {
+      adapter: "telegram-note",
+      externalReference: { channel: "telegram", chatId: "111", messageId: "1" },
+    },
+  );
+  addNote(
+    root,
+    { content: "workspace two" },
+    {
+      adapter: "telegram-note",
+      externalReference: { channel: "telegram", chatId: "222", messageId: "2" },
+    },
+  );
+  const scoped = listRecords(root, { workspace: { chatId: "111" } });
+  assert.equal(scoped.length, 1);
+  assert.match(scoped[0]?.sourceReference ?? "", /notes/);
+});
+
+test("listRecords on an empty store returns an empty list", () => {
+  assert.deepEqual(listRecords(temporaryRoot()), []);
 });
