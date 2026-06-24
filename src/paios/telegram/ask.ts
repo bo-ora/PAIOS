@@ -151,12 +151,20 @@ export async function summarizeRecords(
 }
 
 // A question about the user's OWN stored facts must be answered only via
-// grounded retrieval, never open invention (ADR-0007). Match possessives
-// ("my"/"mine") and first-person-subject recall questions ("did I note…",
-// "I saved…"), but NOT the object pronoun "me" in imperatives like "give me"
-// or "tell me", which are ordinary assist requests.
+// grounded retrieval, never open invention (ADR-0007). We bias toward grounded
+// (a false positive merely yields a harmless "couldn't find" reply, while a
+// false negative risks an ungrounded personal claim), but the pattern is kept
+// tight enough that ordinary advice/how-to questions stay in open assist:
+//   1. possessives — "my"/"mine";
+//   2. interrogative recall — "do/does/did I have/note/save/record/…";
+//   3. first-person declarative recall — "I noted/saved/recorded/…";
+//   4. perfect-tense recall questions — "have/had I …".
+// It deliberately excludes the object pronoun "me" ("give me", "tell me"),
+// advice modals with a bare subject ("can/could/should/would/will I …",
+// "was/were/am I …"), and bare "I have/had" ("I have a question …"), which are
+// ordinary conversational requests rather than questions about stored facts.
 const personalFactPattern =
-  /\b(my|mine)\b|\b(did|do|does|have|had|was|were|am|will|would|can|could|should)\s+i\b|\bi\s+(noted|recorded|saved|wrote|said|mentioned|told|logged|captured|have|had)\b/i;
+  /\b(my|mine)\b|\b(do|does|did)\s+i\s+(have|had|noted?|recorded?|saved?|wrote|written|said|mentioned?|told|logged?|captured?)\b|\bi\s+(noted|recorded|saved|wrote|said|mentioned|told|logged|captured)\b|\b(have|has|had)\s+i\b/i;
 
 export interface ConversationDeps {
   dataRoot: string;

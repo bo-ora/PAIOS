@@ -241,6 +241,56 @@ test("handleConversation assist does not treat imperative 'me' as a personal fac
   assert.equal(converseCalls.length, 3);
 });
 
+test("handleConversation assist treats general advice questions as open conversation", async () => {
+  const root = temporaryRoot();
+  const store = createDialogueStore();
+  store.setMode("telegram:100", "assist");
+  const { provider, converseCalls } = fakeSynthesis("unused");
+  const generalQuestions = [
+    "can I ask you something",
+    "should I use tabs or spaces",
+    "how do I center a div",
+    "I have a question about React",
+    "was I clear enough in that explanation",
+    "am I right that promises are eager",
+  ];
+  for (const text of generalQuestions) {
+    const reply = await handleConversation(
+      { dataRoot: root, synthesis: provider },
+      "telegram:100",
+      text,
+      store,
+    );
+    assert.match(reply, /^\[assist\]/, text);
+    assert.doesNotMatch(reply, /grounded lookup/i, text);
+  }
+  assert.equal(converseCalls.length, generalQuestions.length);
+});
+
+test("handleConversation assist still routes genuine recall phrasings to grounded", async () => {
+  const root = temporaryRoot();
+  const store = createDialogueStore();
+  store.setMode("telegram:100", "assist");
+  const { provider, converseCalls } = fakeSynthesis("unused");
+  const recallQuestions = [
+    "do I have any notes about the meeting",
+    "did I save the receipt",
+    "have I recorded my weight this week",
+    "I noted something about the dentist",
+    "what is my blood pressure",
+  ];
+  for (const text of recallQuestions) {
+    const reply = await handleConversation(
+      { dataRoot: root, synthesis: provider },
+      "telegram:100",
+      text,
+      store,
+    );
+    assert.match(reply, /grounded lookup/i, text);
+  }
+  assert.equal(converseCalls.length, 0); // never open invention for recall
+});
+
 test("handleConversation assist personal-fact routes through grounded retrieval", async () => {
   const root = temporaryRoot();
   addNote(root, { content: "My dentist appointment is on Tuesday at 9am." });
