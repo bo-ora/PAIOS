@@ -1,4 +1,5 @@
 import type { KnowledgeSourceType } from "../types.js";
+import type { Mode } from "./dialogue.js";
 import type { InboundMessage } from "./messaging.js";
 
 /**
@@ -17,6 +18,7 @@ export type Intent =
       recordId?: string;
       recent?: { sourceTypes?: KnowledgeSourceType[] };
     }
+  | { kind: "set-mode"; mode: Mode }
   | { kind: "help" };
 
 function recallSourceTypes(text: string): KnowledgeSourceType[] {
@@ -53,6 +55,13 @@ export function parseIntent(message: InboundMessage): Intent {
 
   if (text === "/start" || text === "/help") {
     return { kind: "help" };
+  }
+
+  if (text === "/grounded") {
+    return { kind: "set-mode", mode: "grounded" };
+  }
+  if (text === "/assist" || text === "/chat") {
+    return { kind: "set-mode", mode: "assist" };
   }
 
   if (text.startsWith("/ask ") || text.startsWith("?")) {

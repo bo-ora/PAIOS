@@ -242,6 +242,25 @@ test("parseIntent recognises inspect and help", () => {
   assert.deepEqual(parseIntent(textMessage("/start")), { kind: "help" });
 });
 
+test("parseIntent recognises mode toggles", () => {
+  assert.deepEqual(parseIntent(textMessage("/grounded")), {
+    kind: "set-mode",
+    mode: "grounded",
+  });
+  assert.deepEqual(parseIntent(textMessage("/assist")), {
+    kind: "set-mode",
+    mode: "assist",
+  });
+  assert.deepEqual(parseIntent(textMessage("/chat")), {
+    kind: "set-mode",
+    mode: "assist",
+  });
+  // Bare words without a slash are still captured as notes, not mode toggles.
+  assert.deepEqual(parseIntent(textMessage("assist me please")), {
+    kind: "capture",
+  });
+});
+
 test("parseIntent recognises summarize by id, bare, and recent", () => {
   assert.deepEqual(parseIntent(textMessage("/summarize r1")), {
     kind: "summarize",
