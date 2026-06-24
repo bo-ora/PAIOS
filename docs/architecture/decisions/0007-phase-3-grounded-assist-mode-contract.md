@@ -87,6 +87,29 @@ interface; this ADR governs the *contract and routing*, not the runtime.
   touches only the dialogue/mode state and prompt selection behind the existing
   interface.
 
+## Implementation Notes
+
+- **Local-model refusal mitigation (learned 2026-06-24, live).** The local
+  synthesis model (`llama3.1:8b`) applies generic safety refusals to the user's
+  OWN data when a prompt or question foregrounds trigger framing — e.g. it
+  refused to summarize a personal voice note ("cannot summarize … personal
+  information") and deflected on grounded recall ("I cannot access … your voice
+  notes / audio files"). The reliable fix is to **remove the trigger from the
+  model's input, not to add anti-refusal instructions** (adding "never refuse"
+  while keeping the trigger words failed both times):
+  - Frame transform/recall prompts neutrally; do not foreground
+    personal/private/sensitive wording (`buildSummaryPrompt`).
+  - State that the supplied source text IS the complete readable content, and do
+    not enumerate capture-modality words (which themselves prime the refusal)
+    (`buildSynthesisPrompt`).
+  - When the trigger is in the *user's question* (e.g. "voice note", "audio"),
+    neutralize those capture-modality words in the question shown to the model
+    while leaving retrieval on the original (`neutralizeCaptureModality`).
+  These mitigations preserve the grounding guarantee (sources only, cited, no
+  fabrication) and must be re-validated against any new synthesis prompt or
+  swapped model. Evidence:
+  `docs/sessions/2026-06-24-phase-3-conversational-recall.md`.
+
 ## Validation
 
 - Unit-test mode resolution: default grounded; `/grounded`, `/assist`, `/chat`
