@@ -150,11 +150,13 @@ export async function summarizeRecords(
   };
 }
 
-// First-person / possessive phrasing signals a question about the user. Such
-// questions are answered only via grounded retrieval, never open invention
-// (ADR-0007).
+// A question about the user's OWN stored facts must be answered only via
+// grounded retrieval, never open invention (ADR-0007). Match possessives
+// ("my"/"mine") and first-person-subject recall questions ("did I note…",
+// "I saved…"), but NOT the object pronoun "me" in imperatives like "give me"
+// or "tell me", which are ordinary assist requests.
 const personalFactPattern =
-  /\b(my|mine|myself|i|me|i'm|i've|i am|did i|have i|was i|am i)\b/i;
+  /\b(my|mine)\b|\b(did|do|does|have|had|was|were|am|will|would|can|could|should)\s+i\b|\bi\s+(noted|recorded|saved|wrote|said|mentioned|told|logged|captured|have|had)\b/i;
 
 export interface ConversationDeps {
   dataRoot: string;

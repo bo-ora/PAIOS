@@ -219,6 +219,28 @@ test("handleConversation assist general question yields a labelled open reply", 
   assert.equal(converseCalls.length, 1);
 });
 
+test("handleConversation assist does not treat imperative 'me' as a personal fact", async () => {
+  const root = temporaryRoot();
+  const store = createDialogueStore();
+  store.setMode("telegram:100", "assist");
+  const { provider, converseCalls } = fakeSynthesis("unused");
+  for (const text of [
+    "give me three quick tips for focused work",
+    "tell me a joke",
+    "show me how to write a haiku",
+  ]) {
+    const reply = await handleConversation(
+      { dataRoot: root, synthesis: provider },
+      "telegram:100",
+      text,
+      store,
+    );
+    assert.match(reply, /^\[assist\]/, text);
+    assert.doesNotMatch(reply, /grounded lookup/i, text);
+  }
+  assert.equal(converseCalls.length, 3);
+});
+
 test("handleConversation assist personal-fact routes through grounded retrieval", async () => {
   const root = temporaryRoot();
   addNote(root, { content: "My dentist appointment is on Tuesday at 9am." });
