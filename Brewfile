@@ -29,12 +29,6 @@ brew "whisper-cpp"   # provides the `whisper-cli` binary for local transcription
 # ffmpeg (above) also normalizes Telegram OGG/Opus voice notes.
 brew "ollama"        # local LLM runtime for source-backed answer synthesis
 
-# --- Developer shell helpers (optional) --------------------------------------
-# Needed only if a developer opts into the shell helpers in
-# `scripts/shell/paios.zsh` (a Markdown-rendering `cat`). See the opt-in
-# instructions in docs/operations/development-environment.md.
-brew "glow"          # terminal Markdown renderer
-
 # --- Optional / future phases ------------------------------------------------
 # Docker becomes required with the first containerized service. Uncomment to
 # provision it ahead of time. Docker Desktop is a large cask install.

@@ -70,7 +70,6 @@ security boundary are approved.
 | Ollama | Phase 2 local answer synthesis | Installed locally (`brew "ollama"`) | Local LLM runtime; the default model is `llama3.1:8b` (ADR-0006), pulled with `ollama pull` |
 | Phase 2 synthesis model (Ollama) | Phase 2 ask/answer slice | Pull `llama3.1:8b` | Never download implicitly; override with `PAIOS_SYNTHESIS_MODEL` |
 | Codex CLI | AI-assisted repository workflow | Installed locally; optional for runtime | Raw session events remain under ignored `.local/` |
-| `glow` | Optional Markdown-rendering `cat` shell helper | In `Brewfile` (optional section) | Only needed if you opt into `scripts/shell/paios.zsh` |
 | Docker MCP Toolkit/Catalog | Future connector experiments | Desktop capability installed locally | Not a PAIOS runtime dependency |
 
 Phase-specific tools become required only when their implementation slice
@@ -117,37 +116,6 @@ whether the configured model is pulled, and exits non-zero until all are ready.
 Override the runtime with `OLLAMA_HOST` and the model with
 `PAIOS_SYNTHESIS_MODEL`. The long-poll cursor and all captured knowledge live
 under the data root (`PAIOS_DATA_ROOT`, default `.local/paios/knowledge`).
-
-## Optional Developer Shell Helpers
-
-`scripts/shell/paios.zsh` is an **opt-in** collection of interactive-shell
-conveniences. Nothing sources it automatically and `scripts/bootstrap.sh` never
-edits your `~/.zshrc`; you add one line yourself and can remove it any time:
-
-```bash
-# in ~/.zshrc, then open a new shell
-source /absolute/path/to/PAIOS/scripts/shell/paios.zsh
-```
-
-Current helpers:
-
-- **Markdown-rendering `cat`** — running `cat <file>.md` in an interactive
-  terminal renders it with [`glow`](https://github.com/charmbracelet/glow)
-  (`brew "glow"`, in the optional section of `Brewfile`). In every other case it
-  falls through to the real `cat` byte-for-byte. It only renders when the shell
-  is interactive **and** stdout is a TTY (`-t 1`), so AI agents (Codex, Claude
-  Code) and scripts — which capture output through a pipe or file — always
-  receive the exact file bytes, never styled output. Flags (e.g. `cat -n`),
-  non-Markdown files, and mixed argument lists also fall through.
-
-The file is safe to source repeatedly and is bash-compatible. If `glow` is not
-installed the helper falls through to the real `cat`, so a fresh clone is never
-broken — only un-enhanced.
-
-On macOS, `scripts/bootstrap.sh` installs `glow` via `Brewfile` and prints the
-exact `source` line. On Linux/WSL, install `glow` with your package manager
-(e.g. `apt install glow` or `dnf install glow`) and add the same `source` line;
-the helper works under both zsh and bash.
 
 ## Configuration That Must Remain Local
 
