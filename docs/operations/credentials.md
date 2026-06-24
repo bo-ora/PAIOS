@@ -45,11 +45,12 @@ environment, not in this inventory's secret store unless convenient:
   model; default is recorded in the Phase 2 architecture ADR.
 - `PAIOS_FFMPEG_PATH`, `PAIOS_WHISPER_CLI_PATH`, `PAIOS_WHISPER_MODEL_PATH` —
   Phase 1 audio toolchain paths (see development-environment.md). For Phase 3
-  (Conversational Recall), point `PAIOS_WHISPER_MODEL_PATH` at the locked voice
-  tier: default `ggml-small.bin` (Ukrainian + English), with
-  `ggml-medium-q5_0.bin` as the live-A/B alternative. Language is auto-detected
-  (no fixed `-l` flag); `large-v3` is ruled out on the current CPU. The final
-  tier is chosen from the live A/B smoke evidence (see ADR-0008).
+  (Conversational Recall), point `PAIOS_WHISPER_MODEL_PATH` at the chosen voice
+  tier: `ggml-large-v3-turbo-q5_0.bin`, selected from the 2026-06-24 live A/B on
+  real Ukrainian voice notes (most accurate of five tiers on this CPU at
+  ~2.9 s/note; see ADR-0008 and the session evidence). Language is auto-detected
+  (no fixed `-l` flag; Ukrainian + English). Plain `large-v3` (non-turbo) stays
+  unused (too slow on this CPU).
 
 ## Adding a New Credential
 

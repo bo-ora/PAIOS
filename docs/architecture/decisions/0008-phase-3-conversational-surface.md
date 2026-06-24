@@ -75,9 +75,26 @@ UX choices on 2026-06-24: a persistent mode toggle (ADR-0007) and inline
 
 - Configuration only: the whisper model tier is selected by the existing
   `PAIOS_WHISPER_MODEL_PATH`, and language uses the transcriber's existing
-  `auto` default (ADR-0003 pipeline unchanged). The `small`-vs-`medium-q5` choice
-  is made from live A/B evidence; `large-v3` is ruled out. A repository A/B
-  harness already exists under `tests/paios/` and is reused for the comparison.
+  `auto` default (ADR-0003 pipeline unchanged). The tier is chosen from live A/B
+  evidence; a repository A/B harness already exists under `tests/paios/` and is
+  reused for the comparison.
+
+- **Resolved (2026-06-24, live A/B, user-chosen tier): `large-v3-turbo-q5_0`.**
+  On a real ~19s Ukrainian voice note transcribed on this CPU, five tiers were
+  compared against the user's ground-truth text (`base`, `small`, `medium-q5`,
+  full `medium`, `large-v3-turbo-q5`). `large-v3-turbo-q5_0` (≈547 MB, ≈2.9 s)
+  was the most accurate by a clear margin — it was the only tier to get the
+  proper name *Зоряною*, the nationality *українець*, *мовою*, and *звуть* all
+  correct; its only residual errors were two declension endings and the foreign
+  toponym *Oviedo*, which **no** tier transcribed cleanly. Full `medium` (1.46 GB)
+  was *less* accurate than turbo, so size did not predict accuracy here.
+  - This **supersedes the earlier "`small` default / `large-v3` ruled out"
+    framing.** That ruling was about plain `large-v3`'s CPU *latency*; the user
+    explicitly relaxed the latency constraint (accuracy-first, longer processing
+    acceptable for voice notes), and the large-v3 **turbo** distill delivers
+    near-large-v3 accuracy at ≈2.9 s — within tolerance. Plain `large-v3`
+    (non-turbo, ≈3 GB, ~10–20 s) remains unused.
+  - Evidence: `docs/sessions/2026-06-24-phase-3-conversational-recall.md`.
 
 ## Alternatives Considered
 
