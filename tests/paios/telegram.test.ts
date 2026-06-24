@@ -6,6 +6,8 @@ import { afterEach, test } from "node:test";
 
 import type {
   AnswerSynthesisProvider,
+  SummarizeRequest,
+  SummarizeResult,
   SynthesisRequest,
   SynthesisResult,
 } from "../../src/paios/synthesis/provider.js";
@@ -41,6 +43,7 @@ import type { AudioProcessingOptions } from "../../src/paios/knowledge/audio-pro
 import {
   answerQuestion,
   formatAnswerReply,
+  summarizeRecords,
 } from "../../src/paios/telegram/ask.js";
 import { captureMessage } from "../../src/paios/telegram/capture.js";
 import type {
@@ -84,6 +87,12 @@ function fakeSynthesis(answer: string): {
         outcome: "answered",
         answer,
         citedRecordIds,
+      });
+    },
+    summarize(request: SummarizeRequest): Promise<SummarizeResult> {
+      return Promise.resolve({
+        summary: `summary of ${request.records.length} record(s)`,
+        recordIds: request.records.map((r) => r.recordId),
       });
     },
   };
@@ -202,6 +211,56 @@ test("parseIntent recognises inspect and help", () => {
   });
   assert.deepEqual(parseIntent(textMessage("/help")), { kind: "help" });
   assert.deepEqual(parseIntent(textMessage("/start")), { kind: "help" });
+});
+
+test("parseIntent recognises summarize by id, bare, and recent", () => {
+  assert.deepEqual(parseIntent(textMessage("/summarize r1")), {
+    kind: "summarize",
+    recordId: "r1",
+  });
+  assert.deepEqual(parseIntent(textMessage("/summarize")), {
+    kind: "summarize",
+  });
+  const recent = parseIntent(textMessage("summarize my recent notes"));
+  assert.equal(recent.kind, "summarize");
+  assert.deepEqual(
+    recent.kind === "summarize" ? recent.recent?.sourceTypes : null,
+    ["note"],
+  );
+  assert.deepEqual(parseIntent(textMessage("summarize this")), {
+    kind: "summarize",
+  });
+});
+
+test("summarizeRecords summarizes a record and reports an empty selection", async () => {
+  const root = temporaryRoot();
+  const note = addNote(root, { content: "a note worth summarizing" });
+  const { provider } = fakeSynthesis("unused");
+  const ok = await summarizeRecords(root, { recordId: note.id }, provider);
+  assert.equal(ok.outcome, "summarized");
+  assert.deepEqual(ok.recordIds, [note.id]);
+  assert.match(ok.summary, /summary of 1/);
+
+  const missing = await summarizeRecords(
+    root,
+    { recordId: "does-not-exist" },
+    provider,
+  );
+  assert.equal(missing.outcome, "no-records");
+});
+
+test("summarizeRecords summarizes a recent set by type", async () => {
+  const root = temporaryRoot();
+  addNote(root, { content: "first recent note" });
+  addNote(root, { content: "second recent note" });
+  const { provider } = fakeSynthesis("unused");
+  const out = await summarizeRecords(
+    root,
+    { recent: { sourceTypes: ["note"], limit: 5 } },
+    provider,
+  );
+  assert.equal(out.outcome, "summarized");
+  assert.equal(out.recordIds.length, 2);
 });
 
 test("parseIntent recognises recency phrases as recall", () => {

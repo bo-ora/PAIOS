@@ -1,9 +1,12 @@
 import type { FetchLike } from "../http-fetch.js";
 import type { SynthesisConfig } from "../telegram/config.js";
 import {
+  buildSummaryPrompt,
   buildSynthesisPrompt,
   extractCitations,
   type AnswerSynthesisProvider,
+  type SummarizeRequest,
+  type SummarizeResult,
   type SynthesisRequest,
   type SynthesisResult,
 } from "./provider.js";
@@ -32,39 +35,62 @@ function extractContent(payload: unknown): string {
 export function createOllamaProvider(
   options: OllamaProviderOptions,
 ): AnswerSynthesisProvider {
+  async function chat(
+    messages: { role: string; content: string }[],
+    failureLabel: string,
+  ): Promise<string> {
+    const response = await options.fetch(`${options.config.ollamaHost}/api/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: options.config.model,
+        stream: false,
+        options: { temperature: 0.1 },
+        messages,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `${failureLabel}: model runtime returned status ${response.status}.`,
+      );
+    }
+    return extractContent(await response.json()).trim();
+  }
+
   return {
     async synthesize(request: SynthesisRequest): Promise<SynthesisResult> {
       if (request.records.length === 0) {
         return { outcome: "no-sources", answer: "", citedRecordIds: [] };
       }
       const prompt = buildSynthesisPrompt(request);
-      const response = await options.fetch(
-        `${options.config.ollamaHost}/api/chat`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            model: options.config.model,
-            stream: false,
-            options: { temperature: 0.1 },
-            messages: [
-              { role: "system", content: prompt.system },
-              { role: "user", content: prompt.user },
-            ],
-          }),
-        },
+      const answer = await chat(
+        [
+          { role: "system", content: prompt.system },
+          { role: "user", content: prompt.user },
+        ],
+        "Answer synthesis failed",
       );
-      if (!response.ok) {
-        throw new Error(
-          `Answer synthesis failed: model runtime returned status ${response.status}.`,
-        );
-      }
-      const answer = extractContent(await response.json()).trim();
       return {
         outcome: answer.length === 0 ? "refused" : "answered",
         answer,
         citedRecordIds: extractCitations(answer, request.records),
       };
+    },
+
+    async summarize(request: SummarizeRequest): Promise<SummarizeResult> {
+      const recordIds = request.records.map((record) => record.recordId);
+      if (request.records.length === 0) {
+        return { summary: "", recordIds };
+      }
+      const prompt = buildSummaryPrompt(request);
+      const summary = await chat(
+        [
+          { role: "system", content: prompt.system },
+          { role: "user", content: prompt.user },
+        ],
+        "Summary failed",
+      );
+      return { summary, recordIds };
     },
   };
 }

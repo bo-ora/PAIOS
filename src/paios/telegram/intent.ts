@@ -12,7 +12,27 @@ export type Intent =
   | { kind: "ask"; question: string }
   | { kind: "inspect"; recordId: string }
   | { kind: "recall"; sourceTypes?: KnowledgeSourceType[] }
+  | {
+      kind: "summarize";
+      recordId?: string;
+      recent?: { sourceTypes?: KnowledgeSourceType[] };
+    }
   | { kind: "help" };
+
+function recallSourceTypes(text: string): KnowledgeSourceType[] {
+  // "voice note" is audio, not a note: voice/audio phrasing takes precedence.
+  if (voicePattern.test(text)) {
+    return ["audio"];
+  }
+  const types: KnowledgeSourceType[] = [];
+  if (notePattern.test(text)) {
+    types.push("note");
+  }
+  if (documentPattern.test(text)) {
+    types.push("managed-file");
+  }
+  return types;
+}
 
 // Recency/metadata recall (ADR-0008, Phase 3 A): anchored structural phrases so
 // ordinary notes are not hijacked. Content questions still reach `ask`/capture.
@@ -53,19 +73,22 @@ export function parseIntent(message: InboundMessage): Intent {
       : { kind: "inspect", recordId };
   }
 
+  if (text === "/summarize" || /^summari[sz]e\b/i.test(text)) {
+    const sourceTypes = recallSourceTypes(text);
+    return {
+      kind: "summarize",
+      ...(sourceTypes.length > 0 ? { recent: { sourceTypes } } : {}),
+    };
+  }
+  if (text.startsWith("/summarize ")) {
+    const recordId = text.slice("/summarize ".length).trim();
+    return recordId.length === 0
+      ? { kind: "summarize" }
+      : { kind: "summarize", recordId };
+  }
+
   if (recencyPattern.test(text)) {
-    // "voice note" is audio, not a note: voice/audio phrasing takes precedence.
-    const sourceTypes: KnowledgeSourceType[] = [];
-    if (voicePattern.test(text)) {
-      sourceTypes.push("audio");
-    } else {
-      if (notePattern.test(text)) {
-        sourceTypes.push("note");
-      }
-      if (documentPattern.test(text)) {
-        sourceTypes.push("managed-file");
-      }
-    }
+    const sourceTypes = recallSourceTypes(text);
     return {
       kind: "recall",
       ...(sourceTypes.length > 0 ? { sourceTypes } : {}),

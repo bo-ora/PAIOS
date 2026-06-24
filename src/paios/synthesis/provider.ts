@@ -26,8 +26,23 @@ export interface SynthesisResult {
   citedRecordIds: string[];
 }
 
+export interface SummarizeRequest {
+  records: RetrievedRecord[];
+}
+
+export interface SummarizeResult {
+  summary: string;
+  recordIds: string[];
+}
+
 export interface AnswerSynthesisProvider {
   synthesize(request: SynthesisRequest): Promise<SynthesisResult>;
+  /**
+   * Generative summary over the user's own selected records (ADR-0008, Phase
+   * 3 B). Distinct from grounded Q&A: it transforms the given content and must
+   * not add facts not present in it.
+   */
+  summarize(request: SummarizeRequest): Promise<SummarizeResult>;
 }
 
 // Common English function words carry no retrieval signal and, OR-ed together,
@@ -94,6 +109,30 @@ export function buildSynthesisPrompt(request: SynthesisRequest): {
     sources,
   ].join("\n");
   return { system: synthesisSystemPrompt, user };
+}
+
+const summarySystemPrompt = [
+  "You are the user's private personal knowledge assistant.",
+  "Summarize the user's OWN records below faithfully and concisely.",
+  "Use ONLY what the records contain; do not add, invent, or infer facts that are not present.",
+  "Preserve concrete personal details (names, numbers, dates) exactly as written — it is the user's own information.",
+  "Write a plain-language summary; if the records are already brief, a one-line summary is fine.",
+].join(" ");
+
+export function buildSummaryPrompt(request: SummarizeRequest): {
+  system: string;
+  user: string;
+} {
+  const sources = request.records
+    .map((record, index) => {
+      const heading = `Record ${index + 1} — ${record.recordId}${
+        record.title === null ? "" : ` (${record.title})`
+      }`;
+      return `${heading}\n${record.text}`;
+    })
+    .join("\n\n");
+  const user = ["Summarize these records:", "", sources].join("\n");
+  return { system: summarySystemPrompt, user };
 }
 
 /**

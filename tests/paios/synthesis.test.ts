@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import type { RetrievedRecord } from "../../src/paios/synthesis/provider.js";
 import {
+  buildSummaryPrompt,
   buildSynthesisPrompt,
   extractCitations,
   toSearchQuery,
@@ -109,4 +110,25 @@ test("ollama provider throws on a non-ok response", async () => {
   await assert.rejects(
     provider.synthesize({ question: "q", records: [record("r1", "x")] }),
   );
+});
+
+test("buildSummaryPrompt instructs faithful transform over the given records", () => {
+  const prompt = buildSummaryPrompt({
+    records: [record("r1", "a long note about gardening"), record("r2", "more")],
+  });
+  assert.match(prompt.system, /summari/i);
+  assert.match(prompt.system, /not (add|invent|fabricate)|only/i);
+  assert.match(prompt.user, /r1/);
+  assert.match(prompt.user, /gardening/);
+});
+
+test("ollama provider summarizes and echoes the input record ids", async () => {
+  const { fetch, calls } = fakeChatFetch("A concise summary.");
+  const provider = createOllamaProvider({ config: synthesisConfig, fetch });
+  const result = await provider.summarize({
+    records: [record("r1", "content one"), record("r2", "content two")],
+  });
+  assert.match(result.summary, /concise summary/);
+  assert.deepEqual(result.recordIds, ["r1", "r2"]);
+  assert.ok(calls.some((url) => url.includes("/api/chat")));
 });
