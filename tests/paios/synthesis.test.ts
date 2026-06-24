@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import type { RetrievedRecord } from "../../src/paios/synthesis/provider.js";
 import {
+  buildAssistPrompt,
   buildSummaryPrompt,
   buildSynthesisPrompt,
   extractCitations,
@@ -120,6 +121,34 @@ test("buildSummaryPrompt instructs faithful transform over the given records", (
   assert.match(prompt.system, /not (add|invent|fabricate)|only/i);
   assert.match(prompt.user, /r1/);
   assert.match(prompt.user, /gardening/);
+});
+
+test("buildAssistPrompt forbids asserting ungrounded personal facts", () => {
+  const prompt = buildAssistPrompt({ message: "hi", context: [] });
+  assert.match(prompt.system, /do not state facts about the user|personal/i);
+  assert.match(prompt.system, /source/i);
+  assert.equal(prompt.messages.at(-1)?.content, "hi");
+});
+
+test("buildAssistPrompt threads prior turns as conversation history", () => {
+  const prompt = buildAssistPrompt({
+    message: "and the second?",
+    context: [
+      { role: "user", text: "first question" },
+      { role: "assistant", text: "first answer" },
+    ],
+  });
+  assert.equal(prompt.messages.length, 3);
+  assert.equal(prompt.messages[0]?.content, "first question");
+  assert.equal(prompt.messages.at(-1)?.content, "and the second?");
+});
+
+test("ollama provider converses over the chat endpoint", async () => {
+  const { fetch, calls } = fakeChatFetch("Here are some ideas.");
+  const provider = createOllamaProvider({ config: synthesisConfig, fetch });
+  const result = await provider.converse({ message: "brainstorm", context: [] });
+  assert.match(result.reply, /ideas/);
+  assert.ok(calls.some((url) => url.includes("/api/chat")));
 });
 
 test("ollama provider summarizes and echoes the input record ids", async () => {

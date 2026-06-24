@@ -6,6 +6,8 @@ import { afterEach, test } from "node:test";
 
 import type {
   AnswerSynthesisProvider,
+  ConverseRequest,
+  ConverseResult,
   SummarizeRequest,
   SummarizeResult,
   SynthesisRequest,
@@ -43,6 +45,7 @@ import type { AudioProcessingOptions } from "../../src/paios/knowledge/audio-pro
 import {
   answerQuestion,
   formatAnswerReply,
+  handleConversation,
   summarizeRecords,
 } from "../../src/paios/telegram/ask.js";
 import { captureMessage } from "../../src/paios/telegram/capture.js";
@@ -78,8 +81,10 @@ afterEach(() => {
 function fakeSynthesis(answer: string): {
   provider: AnswerSynthesisProvider;
   requests: SynthesisRequest[];
+  converseCalls: ConverseRequest[];
 } {
   const requests: SynthesisRequest[] = [];
+  const converseCalls: ConverseRequest[] = [];
   const provider: AnswerSynthesisProvider = {
     synthesize(request: SynthesisRequest): Promise<SynthesisResult> {
       requests.push(request);
@@ -96,8 +101,12 @@ function fakeSynthesis(answer: string): {
         recordIds: request.records.map((r) => r.recordId),
       });
     },
+    converse(request: ConverseRequest): Promise<ConverseResult> {
+      converseCalls.push(request);
+      return Promise.resolve({ reply: "open conversational reply" });
+    },
   };
-  return { provider, requests };
+  return { provider, requests, converseCalls };
 }
 
 function jsonResponse(
@@ -176,6 +185,89 @@ test("workspaceKey encodes chat-only and chat+thread workspaces", () => {
     workspaceKey({ channel: "telegram", chatId: "100", threadId: "5" }),
     "telegram:100:5",
   );
+});
+
+test("handleConversation grounded mode matches the Phase 2 answer path", async () => {
+  const root = temporaryRoot();
+  addNote(root, { content: "The spare key is under the blue flowerpot." });
+  const store = createDialogueStore();
+  const { provider } = fakeSynthesis("It is under the blue flowerpot.");
+  const expected = formatAnswerReply(
+    await answerQuestion(root, "where is the spare key", provider),
+  );
+  const reply = await handleConversation(
+    { dataRoot: root, synthesis: provider },
+    "telegram:100",
+    "where is the spare key",
+    store,
+  );
+  assert.equal(reply, expected);
+});
+
+test("handleConversation assist general question yields a labelled open reply", async () => {
+  const root = temporaryRoot();
+  const store = createDialogueStore();
+  store.setMode("telegram:100", "assist");
+  const { provider, converseCalls } = fakeSynthesis("unused");
+  const reply = await handleConversation(
+    { dataRoot: root, synthesis: provider },
+    "telegram:100",
+    "brainstorm names for a project",
+    store,
+  );
+  assert.match(reply, /^\[assist\]/);
+  assert.equal(converseCalls.length, 1);
+});
+
+test("handleConversation assist personal-fact routes through grounded retrieval", async () => {
+  const root = temporaryRoot();
+  addNote(root, { content: "My dentist appointment is on Tuesday at 9am." });
+  const store = createDialogueStore();
+  store.setMode("telegram:100", "assist");
+  const { provider, converseCalls } = fakeSynthesis("Tuesday at 9am.");
+  const reply = await handleConversation(
+    { dataRoot: root, synthesis: provider },
+    "telegram:100",
+    "when is my dentist appointment",
+    store,
+  );
+  assert.match(reply, /grounded lookup/i);
+  assert.match(reply, /Sources:/);
+  assert.equal(converseCalls.length, 0);
+});
+
+test("handleConversation assist personal-fact with no source never fabricates", async () => {
+  const root = temporaryRoot();
+  const store = createDialogueStore();
+  store.setMode("telegram:100", "assist");
+  const { provider, converseCalls, requests } = fakeSynthesis("should not be used");
+  const reply = await handleConversation(
+    { dataRoot: root, synthesis: provider },
+    "telegram:100",
+    "what did i note about my car",
+    store,
+  );
+  assert.match(reply, /grounded lookup/i);
+  assert.match(reply, /couldn't find|could not find/i);
+  assert.equal(requests.length, 0); // empty retrieval: synthesize never called
+  assert.equal(converseCalls.length, 0); // never falls back to open invention
+});
+
+test("handleConversation appends user and assistant turns", async () => {
+  const root = temporaryRoot();
+  const store = createDialogueStore();
+  store.setMode("telegram:100", "assist");
+  const { provider } = fakeSynthesis("unused");
+  await handleConversation(
+    { dataRoot: root, synthesis: provider },
+    "telegram:100",
+    "hello there",
+    store,
+  );
+  const turns = store.recentTurns("telegram:100");
+  assert.equal(turns.length, 2);
+  assert.equal(turns[0]?.role, "user");
+  assert.equal(turns[1]?.role, "assistant");
 });
 
 test("dialogue store defaults to grounded and toggles mode per key", () => {

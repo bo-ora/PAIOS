@@ -1,10 +1,13 @@
 import type { FetchLike } from "../http-fetch.js";
 import type { SynthesisConfig } from "../telegram/config.js";
 import {
+  buildAssistPrompt,
   buildSummaryPrompt,
   buildSynthesisPrompt,
   extractCitations,
   type AnswerSynthesisProvider,
+  type ConverseRequest,
+  type ConverseResult,
   type SummarizeRequest,
   type SummarizeResult,
   type SynthesisRequest,
@@ -91,6 +94,15 @@ export function createOllamaProvider(
         "Summary failed",
       );
       return { summary, recordIds };
+    },
+
+    async converse(request: ConverseRequest): Promise<ConverseResult> {
+      const prompt = buildAssistPrompt(request);
+      const reply = await chat(
+        [{ role: "system", content: prompt.system }, ...prompt.messages],
+        "Assist conversation failed",
+      );
+      return { reply };
     },
   };
 }

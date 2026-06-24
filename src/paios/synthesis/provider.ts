@@ -35,6 +35,21 @@ export interface SummarizeResult {
   recordIds: string[];
 }
 
+/** A prior dialogue turn passed to assist mode for phrasing/reference only. */
+export interface ConverseTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface ConverseRequest {
+  message: string;
+  context: ConverseTurn[];
+}
+
+export interface ConverseResult {
+  reply: string;
+}
+
 export interface AnswerSynthesisProvider {
   synthesize(request: SynthesisRequest): Promise<SynthesisResult>;
   /**
@@ -43,6 +58,12 @@ export interface AnswerSynthesisProvider {
    * not add facts not present in it.
    */
   summarize(request: SummarizeRequest): Promise<SummarizeResult>;
+  /**
+   * Open assist-mode conversation (ADR-0007). May reason and draft using
+   * general knowledge but must NOT assert personal facts about the user; those
+   * are routed through grounded retrieval by the caller.
+   */
+  converse(request: ConverseRequest): Promise<ConverseResult>;
 }
 
 // Common English function words carry no retrieval signal and, OR-ed together,
@@ -133,6 +154,28 @@ export function buildSummaryPrompt(request: SummarizeRequest): {
     .join("\n\n");
   const user = ["Summarize these records:", "", sources].join("\n");
   return { system: summarySystemPrompt, user };
+}
+
+const assistSystemPrompt = [
+  "You are the user's private personal assistant in open conversation mode.",
+  "You may reason, brainstorm, draft, and discuss using general knowledge.",
+  "CRITICAL: do not state facts about the user — their data, history, plans, possessions, health, or anything personal — unless those facts were given to you from their stored sources.",
+  "If asked something personal you do not have a source for, say you would need to look it up in their notes rather than guessing or inventing it.",
+  "Keep replies concise and conversational.",
+].join(" ");
+
+export function buildAssistPrompt(request: ConverseRequest): {
+  system: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+} {
+  const history = request.context.map((turn) => ({
+    role: turn.role,
+    content: turn.text,
+  }));
+  return {
+    system: assistSystemPrompt,
+    messages: [...history, { role: "user", content: request.message }],
+  };
 }
 
 /**

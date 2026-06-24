@@ -6,6 +6,7 @@ import {
   type RetrievedRecord,
   type SynthesisOutcome,
 } from "../synthesis/provider.js";
+import type { DialogueStore } from "./dialogue.js";
 
 /**
  * Source-backed ask orchestration (ADR-0006): retrieve with Phase 1 lexical
@@ -147,6 +148,49 @@ export async function summarizeRecords(
     summary: result.summary,
     recordIds: result.recordIds,
   };
+}
+
+// First-person / possessive phrasing signals a question about the user. Such
+// questions are answered only via grounded retrieval, never open invention
+// (ADR-0007).
+const personalFactPattern =
+  /\b(my|mine|myself|i|me|i'm|i've|i am|did i|have i|was i|am i)\b/i;
+
+export interface ConversationDeps {
+  dataRoot: string;
+  synthesis: AnswerSynthesisProvider;
+}
+
+/**
+ * Mode-aware multi-turn handler (ADR-0007). Grounded mode is the unchanged
+ * Phase 2 path. Assist mode converses openly for general questions but routes
+ * any personal-fact question through grounded retrieval, labelling the reply so
+ * the active contract is always visible. Turns are recorded in the ephemeral,
+ * in-memory dialogue store; nothing is persisted.
+ */
+export async function handleConversation(
+  deps: ConversationDeps,
+  key: string,
+  question: string,
+  store: DialogueStore,
+): Promise<string> {
+  store.appendTurn(key, { role: "user", text: question, at: Date.now() });
+  const mode = store.getMode(key);
+  let reply: string;
+  if (mode === "grounded") {
+    const result = await answerQuestion(deps.dataRoot, question, deps.synthesis);
+    reply = formatAnswerReply(result);
+  } else if (personalFactPattern.test(question)) {
+    const result = await answerQuestion(deps.dataRoot, question, deps.synthesis);
+    reply = `[assist · grounded lookup]\n${formatAnswerReply(result)}`;
+  } else {
+    // Exclude the just-appended user turn; it is passed as `message`.
+    const context = store.recentTurns(key).slice(0, -1);
+    const result = await deps.synthesis.converse({ message: question, context });
+    reply = `[assist] ${result.reply}`;
+  }
+  store.appendTurn(key, { role: "assistant", text: reply, at: Date.now() });
+  return reply;
 }
 
 export function formatAnswerReply(result: AskResult): string {
