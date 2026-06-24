@@ -15,6 +15,8 @@ import type {
 } from "../../src/paios/telegram/messaging.js";
 import { workspaceKey } from "../../src/paios/telegram/messaging.js";
 import { parseIntent } from "../../src/paios/telegram/intent.js";
+import { formatRecallReply } from "../../src/paios/telegram/recall.js";
+import type { RecordListItem } from "../../src/paios/knowledge/records.js";
 import {
   defaultOllamaHost,
   defaultSynthesisModel,
@@ -177,6 +179,51 @@ test("parseIntent recognises inspect and help", () => {
   });
   assert.deepEqual(parseIntent(textMessage("/help")), { kind: "help" });
   assert.deepEqual(parseIntent(textMessage("/start")), { kind: "help" });
+});
+
+test("parseIntent recognises recency phrases as recall", () => {
+  for (const text of [
+    "latest",
+    "recent notes",
+    "my last voice note",
+    "what did I capture today",
+    "/recent",
+    "/latest",
+  ]) {
+    assert.equal(parseIntent(textMessage(text)).kind, "recall", text);
+  }
+});
+
+test("parseIntent maps voice phrasing to the audio source type", () => {
+  const intent = parseIntent(textMessage("my last voice note"));
+  assert.deepEqual(
+    intent.kind === "recall" ? intent.sourceTypes : null,
+    ["audio"],
+  );
+  const notes = parseIntent(textMessage("recent notes"));
+  assert.deepEqual(
+    notes.kind === "recall" ? notes.sourceTypes : null,
+    ["note"],
+  );
+});
+
+test("parseIntent still treats content questions as ask, not recall", () => {
+  assert.equal(parseIntent(textMessage("?what is my blood pressure")).kind, "ask");
+});
+
+test("formatRecallReply lists records newest-first and handles empty", () => {
+  assert.match(formatRecallReply([]).text, /didn't find|no records/i);
+  const item: RecordListItem = {
+    id: "r1",
+    sourceType: "note",
+    title: "Groceries",
+    capturedAt: "2026-06-24T10:00:00.000Z",
+    sourceReference: "sources/notes/r1.txt",
+    state: "ready",
+  };
+  const text = formatRecallReply([item]).text;
+  assert.match(text, /r1/);
+  assert.match(text, /Groceries/);
 });
 
 test("parseIntent treats plain text as capture and empty ask as help", () => {
